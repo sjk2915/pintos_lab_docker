@@ -28,6 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* 자는 쓰레드를 넣을 리스트 */
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,6 +111,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -306,6 +310,16 @@ thread_yield (void) {
 		list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
+}
+
+/* 우리 아이 재우는 함수 */
+void
+thread_sleep (int64_t wakeup_tick)
+{
+	struct thread *thrd = thread_current;
+	thrd->wakeup_tick = wakeup_tick;
+	thrd->status = THREAD_BLOCKED;
+	list_remove(thrd);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
