@@ -2,12 +2,17 @@
 
 이 문서는 **Windows**와 **macOS** 사용자가 Docker와 VSCode DevContainer 기능을 활용하여 Pintos OS 프로젝트를 빠르게 구축할 수 있도록 도와줍니다.
 
-[**참고사항**] 
-* pintos 도커 환경은 `64비트 기반 X86-64` 기반의 `ubuntu:18.04` 버전을 사용합니다. (kaist-pintos는 오리지널 pintos와 달리 64비트 환경을 지원합니다)
+[**주의**]
+* ubunbu:22.04 버전은 충분한 테스트와 검증이 되지 않았습니다. 이 점을 주의해서 사용하시기 바랍니다.
+
+[**참고**] 
+* pintos 도커 환경은 `64비트 기반 X86-64` 기반의 `ubuntu:22.04` 버전을 사용합니다.
+   * kaist-pintos는 오리지널 pintos와 달리 64비트 환경을 지원합니다.
+   * 이번 도커 환경은 ubuntu 22.04를 지원하여 vscode의 최신 버전에서 원격 연결이 안되는 문제를 해결하였습니다.
 * pintos 도커 환경은 kaist-pintos에서 추천하는 qemu 에뮬레이터를 설치하고 사용합니다. 
 * pintos 도커 환경은 9주차부터 13주차까지 같은 환경을 사용합니다. 이 기간동안 별도의 개발 환경을 제공하지 않습니다.
-* 기존 도커 환경과 달리 `vscode`와 통합된 디버깅 환경(F5로 시작하는)을 제공하지 않습니다. 디버깅이 필요한 경우 `gdb`를 사용해야 합니다. 
-* vscode에서 터미널을 실행하면 자동으로 `source /workspaces/pintos_lab_docker/pintos-kaist/activate`를 실행하게 되어 있습니다.
+* 기존 도커 환경과 달리 `vscode`와 통합된 디버깅 환경(F5로 시작하는)을 제공하지 않습니다. 디버깅이 필요한 경우 `gdb`를 사용하세요. 
+* vscode에서 터미널을 오픈하면 자동으로 `source /workspaces/pintos_22.04_lab_docker/pintos/activate`를 실행합니다.
 
 ---
 
@@ -65,12 +70,12 @@ git clone --depth=1 https://github.com/krafton-jungle/pintos_lab_docker.git
 ### 📂 다운로드 후 폴더 구조 설명
 
 ```
-pintos_lab_docker/
+pintos_22.04_lab_docker/
 ├── .devcontainer/
 │   ├── devcontainer.json      # VSCode에서 컨테이너 환경 설정
 │   └── Dockerfile             # pintos 개발 환경 도커 이미지 정의
 │
-├── pintos-kaist-lab
+├── pintos
 │   ├── threads                # 9주차 threads 프로젝트 폴더
 │   ├── userprog               # 10-11주차 user program 프로젝트 폴더
 │   └── vm                     # 12-13주차 virtual memory 프로젝트 폴더
@@ -82,7 +87,7 @@ pintos_lab_docker/
 ## 5. VSCode에서 해당 프로젝트 폴더 열기
 
 1. VSCode를 실행
-2. `파일 → 폴더 열기`로 방금 클론한 `pintos_lab_docker` 폴더를 선택
+2. `파일 → 폴더 열기`로 방금 클론한 `pintos_22.04_lab_docker` 폴더를 선택
 
 ---
 
