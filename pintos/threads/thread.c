@@ -49,6 +49,9 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
+/* 우선순위 기부 깊이제한 */
+#define MAX_DONATION_DEPTH 8
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -62,6 +65,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static void thread_donate_recusively(struct thread *donor, int depth);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -210,6 +214,16 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
+/* priority 내림차순으로 요소 비교 */
+bool
+cmp_priority (const struct list_elem *a,
+			  const struct list_elem *b,
+			  void *aux UNUSED) {
+    struct thread *ta = list_entry(a, struct thread, elem);
+    struct thread *tb = list_entry(b, struct thread, elem);
+    return ta->priority > tb->priority;
+}
+
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -235,14 +249,22 @@ thread_block (void) {
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
-
 	ASSERT (is_thread (t));
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
+
+	if (thread_current ()->priority < t->priority)
+	{
+		if (!intr_context ()) {
+			thread_yield ();
+		} else {
+			intr_yield_on_return();
+		}
+	}
 }
 
 /* Returns the name of the running thread. */
@@ -303,7 +325,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered (&ready_list, &curr->elem, cmp_priority, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -311,13 +333,60 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	struct thread *cur = thread_current ();
+	cur->base_priority = new_priority;
+	thread_update_priority(cur);
+
+	if (!list_empty(&ready_list))
+	{
+		struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
+		if (front->priority > cur->priority)
+			thread_yield();
+	}
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
+}
+
+/* 우선순위 기부 */
+void
+thread_donate_priority(struct thread *thrd, struct thread *donor)
+{
+	list_insert_ordered(&(thrd->donors), &donor->donation_elem,
+						cmp_priority, NULL);
+	thread_donate_recusively(donor, 0);
+}
+
+/* thread_donate_priority용 내부 함수 */
+static void
+thread_donate_recusively(struct thread *donor, int depth)
+{
+    if (depth > MAX_DONATION_DEPTH) return;
+    struct lock *lock = donor->waiting_lock;
+    if (lock != NULL && lock->holder != NULL) {
+        struct thread *holder = lock->holder;
+        if (holder->priority < donor->priority) {
+            holder->priority = donor->priority;
+			// 재귀적으로 H->M->L 구현
+            thread_donate_recusively(holder, depth+1);
+        }
+    }
+}
+
+/* prioriy 업데이트 */
+void
+thread_update_priority(struct thread *t)
+{
+	t->priority = t->base_priority;
+	if (!list_empty(&(t->donors)))
+	{
+		struct thread *max_donor = list_entry(list_max(&t->donors, cmp_priority, NULL),
+                                         	  struct thread, donation_elem);
+    	t->priority = MAX(t->priority, max_donor->priority);
+	}
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -408,6 +477,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->base_priority = priority;
+	t->waiting_lock = NULL;
+	list_init(&(t->donors));
 	t->magic = THREAD_MAGIC;
 }
 
