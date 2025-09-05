@@ -286,9 +286,12 @@ sema_cmp_priority (const struct list_elem *a,
     struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
     struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
+	if (list_empty(&sa->semaphore.waiters)) return false;
+	if (list_empty(&sb->semaphore.waiters)) return true;
+
 	struct thread *ta = list_entry(list_max(&sa->semaphore.waiters, cmp_priority, NULL),
                                    struct thread, elem);
-    struct thread *tb = list_entry(list_max(&sa->semaphore.waiters, cmp_priority, NULL),
+    struct thread *tb = list_entry(list_max(&sb->semaphore.waiters, cmp_priority, NULL),
                                    struct thread, elem);
 
     return ta->priority > tb->priority;
