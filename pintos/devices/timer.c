@@ -28,8 +28,8 @@ static unsigned loops_per_tick;
 static struct list sleep_list;
 
 static bool cmp_wakeup (const struct list_elem *a,
-                  		 const struct list_elem *b,
-						 void *aux UNUSED);
+                  		const struct list_elem *b,
+						void *aux UNUSED);
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
