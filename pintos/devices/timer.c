@@ -27,7 +27,7 @@ static unsigned loops_per_tick;
 /* 자는 쓰레드를 넣을 리스트 */
 static struct list sleep_list;
 
-static bool cmp_wake_up (const struct list_elem *a,
+static bool cmp_wakeup (const struct list_elem *a,
                   		 const struct list_elem *b,
 						 void *aux UNUSED);
 static intr_handler_func timer_interrupt;
@@ -95,9 +95,9 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* wakeup_tick 기준으로 insert_ordered를 실행  */
+/* wakeup_tick 오름차순으로 요소 비교 */
 static bool
-cmp_wake_up (const struct list_elem *a,
+cmp_wakeup (const struct list_elem *a,
 			 const struct list_elem *b,
 			 void *aux UNUSED) {
     struct thread *ta = list_entry(a, struct thread, elem);
@@ -116,7 +116,7 @@ timer_sleep (int64_t ticks) {
 
 	// 인터럽트 끄기
 	enum intr_level old_level = intr_disable ();
-	list_insert_ordered(&sleep_list, &cur->elem, cmp_wake_up, NULL);
+	list_insert_ordered(&sleep_list, &cur->elem, cmp_wakeup, NULL);
 	thread_block();
 	// 인터럽트 다시 켜기
 	intr_set_level (old_level);
