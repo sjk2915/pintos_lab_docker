@@ -24,6 +24,12 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+/* 자는 쓰레드를 넣을 리스트 */
+static struct list sleep_list;
+
+static bool cmp_wakeup (const struct list_elem *a,
+                  		const struct list_elem *b,
+						void *aux UNUSED);
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -41,6 +47,8 @@ timer_init (void) {
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
+
+	list_init (&sleep_list);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -87,14 +95,31 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
+/* wakeup_tick 오름차순으로 요소 비교 */
+static bool
+cmp_wakeup (const struct list_elem *a,
+			 const struct list_elem *b,
+			 void *aux UNUSED) {
+    struct thread *ta = list_entry(a, struct thread, elem);
+    struct thread *tb = list_entry(b, struct thread, elem);
+    return ta->wakeup_tick < tb->wakeup_tick;
+}
+
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	struct thread *cur = thread_current();
+	cur->wakeup_tick = start + ticks;
+
+	// 인터럽트 끄기
+	enum intr_level old_level = intr_disable ();
+	list_insert_ordered(&sleep_list, &cur->elem, cmp_wakeup, NULL);
+	thread_block();
+	// 인터럽트 다시 켜기
+	intr_set_level (old_level);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -120,12 +145,23 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+
+	while (!list_empty(&sleep_list))
+	{
+		struct thread *cur = list_entry(list_front(&sleep_list), struct thread, elem);
+		if (cur->wakeup_tick <= ticks) {
+			list_pop_front(&sleep_list);
+			thread_unblock(cur);
+		} else {
+			break;
+		} 
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
