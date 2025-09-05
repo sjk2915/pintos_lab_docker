@@ -18,6 +18,9 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+/* 슬립 큐 */
+static struct list sleep_q;
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -42,6 +45,8 @@ void timer_init(void)
   outb(0x43, 0x34); /* CW: counter 0, LSB then MSB, mode 2, binary. */
   outb(0x40, count & 0xff);
   outb(0x40, count >> 8);
+
+  list_init(&sleep_q);
 
   intr_register_ext(0x20, timer_interrupt, "8254 Timer");
 }
@@ -82,18 +87,28 @@ int64_t timer_ticks(void)
   return t;
 }
 
-/* Returns the number of timer ticks elapsed since THEN, which
-   should be a value once returned by timer_ticks(). */
+/* timer_ticks()가 한 번 반환했던 값인 then으로부터
+   지금까지 경과한 타이머 틱 수를 반환 */
 int64_t timer_elapsed(int64_t then) { return timer_ticks() - then; }
 
-/* Suspends execution for approximately TICKS timer ticks. */
+/* 현재 스레드의 실행을 대략 ticks 타이머 틱 동안 중단 */
 void timer_sleep(int64_t ticks)
 {
   int64_t start = timer_ticks();
 
+  if (ticks <= 0)
+  {
+    return;
+  };
+  intr_disable();
+  int64_t deadline = timer_ticks() + ticks;
+  struct thread *t = thread_current();
+  t->wakeup_tick = deadline;
+  list_insert_ordered(&sleep_q, &t->elem, thread_wakeup_less, NULL);
+  thread_block();
+  intr_enable();
+
   ASSERT(intr_get_level() == INTR_ON);
-  while (timer_elapsed(start) < ticks)
-    thread_yield();
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -116,6 +131,27 @@ static void timer_interrupt(struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick();
+  struct list_elem *e;
+  struct thread *t;
+
+  int64_t now = ticks;
+  while (!list_empty(&sleep_q))
+  {
+    e = list_front(&sleep_q);
+    t = list_entry(e, struct thread, elem);
+    if (t->wakeup_tick > now)
+    {
+      break;
+    }
+    list_pop_front(&sleep_q);
+    thread_unblock(t);
+
+    struct thread *ct = thread_current();
+    if (t->priority > ct->priority)
+    {
+      intr_yield_on_return();
+    }
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
