@@ -118,7 +118,7 @@ timer_sleep (int64_t ticks) {
 	enum intr_level old_level = intr_disable ();
 	list_insert_ordered(&sleep_list, &cur->elem, cmp_wakeup, NULL);
 	thread_block();
-	// 인터럽트 다시 켜기
+	// 인터럽트 복원
 	intr_set_level (old_level);
 }
 
