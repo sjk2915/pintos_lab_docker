@@ -210,7 +210,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-
+	thread_preempt();
 	return tid;
 }
 
@@ -218,10 +218,13 @@ thread_create (const char *name, int priority,
 bool
 cmp_priority (const struct list_elem *a,
 			  const struct list_elem *b,
-			  void *aux UNUSED) {
+			  void *aux) {
     struct thread *ta = list_entry(a, struct thread, elem);
     struct thread *tb = list_entry(b, struct thread, elem);
-    return ta->priority > tb->priority;
+	if (aux == ASC)
+    	return ta->priority < tb->priority;
+	else
+		return ta->priority > tb->priority;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -253,17 +256,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL);
+	list_insert_ordered (&ready_list, &t->elem, cmp_priority, DESC);
 	t->status = THREAD_READY;
-
-	if (thread_current ()->priority < t->priority)
-	{
-		if (!intr_context ()) {
-			thread_yield ();
-		} else {
-			intr_yield_on_return();
-		}
-	}
 	intr_set_level (old_level);
 }
 
@@ -314,6 +308,24 @@ thread_exit (void) {
 	NOT_REACHED ();
 }
 
+void
+thread_preempt (void)
+{
+	if (!list_empty(&ready_list))
+	{
+		struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
+		if (front->priority > thread_current()->priority)
+		{
+			// 인터럽트 중이면 예약
+			if (intr_context())
+				intr_yield_on_return();
+			// 아니면 즉시 yield
+			else
+				thread_yield();
+		}
+	}
+}
+
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
@@ -325,7 +337,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered (&ready_list, &curr->elem, cmp_priority, NULL);
+		list_insert_ordered (&ready_list, &curr->elem, cmp_priority, DESC);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -336,13 +348,7 @@ thread_set_priority (int new_priority) {
 	struct thread *cur = thread_current ();
 	cur->base_priority = new_priority;
 	thread_update_priority(cur);
-
-	if (!list_empty(&ready_list))
-	{
-		struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
-		if (front->priority > cur->priority)
-			thread_yield();
-	}
+	thread_preempt();
 }
 
 /* Returns the current thread's priority. */
@@ -355,8 +361,7 @@ thread_get_priority (void) {
 void
 thread_donate_priority(struct thread *thrd, struct thread *donor)
 {
-	list_insert_ordered(&(thrd->donors), &donor->donation_elem,
-						cmp_priority, NULL);
+	list_push_back(&(thrd->donors), &donor->donation_elem);
 	thread_donate_recusively(donor, 0);
 }
 

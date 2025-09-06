@@ -32,6 +32,10 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+static bool sema_cmp_priority (const struct list_elem *a,
+            			       const struct list_elem *b,
+                   			   void *aux);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -111,12 +115,13 @@ sema_up (struct semaphore *sema) {
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters))
 	{
-		struct list_elem *max_elem = list_max(&sema->waiters, cmp_priority, NULL);
+		struct list_elem *max_elem = list_max(&sema->waiters, cmp_priority, ASC);
 		list_remove(max_elem);
 		thread_unblock (list_entry (max_elem, struct thread, elem));
 	}
 	sema->value++;
 	intr_set_level (old_level);
+	thread_preempt();
 }
 
 static void sema_test_helper (void *sema_);
@@ -282,19 +287,22 @@ cond_init (struct condition *cond) {
 static bool
 sema_cmp_priority (const struct list_elem *a,
                    const struct list_elem *b,
-                   void *aux UNUSED) {
+                   void *aux) {
     struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
     struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
 	if (list_empty(&sa->semaphore.waiters)) return false;
 	if (list_empty(&sb->semaphore.waiters)) return true;
 
-	struct thread *ta = list_entry(list_max(&sa->semaphore.waiters, cmp_priority, NULL),
+	struct thread *ta = list_entry(list_max(&sa->semaphore.waiters, cmp_priority, ASC),
                                    struct thread, elem);
-    struct thread *tb = list_entry(list_max(&sb->semaphore.waiters, cmp_priority, NULL),
+    struct thread *tb = list_entry(list_max(&sb->semaphore.waiters, cmp_priority, ASC),
                                    struct thread, elem);
-
-    return ta->priority > tb->priority;
+	
+	if (aux == ASC)
+    	return ta->priority < tb->priority;
+	else
+		return ta->priority > tb->priority;
 }
 
 /* Atomically releases LOCK and waits for COND to be signaled by
@@ -349,7 +357,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 
 	if (!list_empty (&cond->waiters))
 	{
-		struct list_elem *max_elem = list_max(&cond->waiters, sema_cmp_priority, NULL);
+		struct list_elem *max_elem = list_max(&cond->waiters, sema_cmp_priority, ASC);
 		list_remove(max_elem);
 		sema_up (&list_entry (max_elem, struct semaphore_elem, elem)->semaphore);
 	}
