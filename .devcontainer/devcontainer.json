@@ -8,7 +8,8 @@
                 "ms-vscode.cpptools-extension-pack",
                 "ms-vscode.cpptools",
                 "ms-azuretools.vscode-docker",
-                "ms-vscode.makefile-tools"
+                "ms-vscode.makefile-tools",
+                "xaver.clang-format"
             ],
             "settings": {
                 "terminal.integrated.defaultProfile.linux": "bash"
