@@ -32,6 +32,9 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops(unsigned loops);
 static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
+static bool compare_wakeup_tick(const struct list_elem *a,
+                                const struct list_elem *b,
+                                void *aux);
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -91,22 +94,36 @@ int64_t timer_ticks(void)
    지금까지 경과한 타이머 틱 수를 반환 */
 int64_t timer_elapsed(int64_t then) { return timer_ticks() - then; }
 
+/* wakeup_tick 오름차순으로 요소 비교
+AUX: true = asc, false = desc */
+static bool compare_wakeup_tick(const struct list_elem *a,
+                                const struct list_elem *b,
+                                void *aux)
+{
+  struct thread *ta = list_entry(a, struct thread, elem);
+  struct thread *tb = list_entry(b, struct thread, elem);
+  int mode = (int)(uintptr_t)aux;
+  if (mode == 0)
+    return ta->wakeup_tick < tb->wakeup_tick; // ASC 오름차순
+  else
+    return ta->wakeup_tick > tb->wakeup_tick; // DESC 내림차순
+}
+
 /* 현재 스레드의 실행을 대략 ticks 타이머 틱 동안 중단 */
 void timer_sleep(int64_t ticks)
 {
-  int64_t start = timer_ticks();
-
   if (ticks <= 0)
   {
     return;
   };
+  struct thread *t = thread_current();
+  t->wakeup_tick = timer_ticks() + ticks;
   // 기존 인터럽트 상태 저장(꺼져있었는지, 켜져있었는지)
   enum intr_level old_level = intr_disable();
-  int64_t deadline = timer_ticks() + ticks;
-  struct thread *t = thread_current();
-  t->wakeup_tick = deadline;
-  list_insert_ordered(&sleep_q, &t->elem, thread_wakeup_less, NULL);
+
+  list_insert_ordered(&sleep_q, &t->elem, compare_wakeup_tick, 0);
   thread_block();
+
   // 인터럽트를 이전 상태로 복원 (원래 꺼져있었으면 꺼진 채로 냅둠)
   intr_set_level(old_level);
 }
@@ -131,26 +148,27 @@ static void timer_interrupt(struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick();
-  struct list_elem *e;
-  struct thread *t;
 
-  int64_t now = ticks;
+  bool need_to_preemption = false;
+
   while (!list_empty(&sleep_q))
   {
-    e = list_front(&sleep_q);
-    t = list_entry(e, struct thread, elem);
-    if (t->wakeup_tick > now)
+    struct list_elem *e = list_front(&sleep_q);
+    struct thread *t = list_entry(e, struct thread, elem);
+    if (t->wakeup_tick > ticks)
     {
       break;
     }
     list_pop_front(&sleep_q);
     thread_unblock(t);
-
-    struct thread *ct = thread_current();
-    if (t->priority > ct->priority)
+    if (t->priority > thread_current()->priority)
     {
-      intr_yield_on_return();
+      need_to_preemption = true;
     }
+  }
+  if (need_to_preemption)
+  {
+    intr_yield_on_return();
   }
 }
 

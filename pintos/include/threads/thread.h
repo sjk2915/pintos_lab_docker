@@ -10,7 +10,8 @@
 #endif
 
 /* States in a thread's life cycle. */
-enum thread_status {
+enum thread_status
+{
   THREAD_RUNNING, /* Running thread. */
   THREAD_READY,   /* Not running but ready to run. */
   THREAD_BLOCKED, /* Waiting for an event to trigger. */
@@ -20,7 +21,7 @@ enum thread_status {
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t)-1) /* Error value for tid_t. */
+#define TID_ERROR ((tid_t) - 1) /* Error value for tid_t. */
 
 /* Thread priorities. */
 #define PRI_MIN 0      /* Lowest priority. */
@@ -84,7 +85,8 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
-struct thread {
+struct thread
+{
   /* Owned by thread.c. */
   tid_t tid;                 /* Thread identifier. */
   enum thread_status status; /* Thread state. */
@@ -142,7 +144,10 @@ int thread_get_load_avg(void);
 
 void do_iret(struct intr_frame *tf);
 
-bool thread_wakeup_less(const struct list_elem *a, const struct list_elem *b,
-                        void *aux);
+bool compare_priority(const struct list_elem *a,
+                      const struct list_elem *b,
+                      void *aux);
+
+void thread_preemption(struct thread *t);
 
 #endif /* threads/thread.h */
