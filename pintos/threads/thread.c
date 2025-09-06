@@ -214,7 +214,8 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
-/* priority 내림차순으로 요소 비교 */
+/* priority로 요소 비교
+   AUX: ASC, DESC */
 bool
 cmp_priority (const struct list_elem *a,
 			  const struct list_elem *b,
@@ -342,16 +343,6 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
-/* priority 내림차순으로 요소 비교 */
-bool
-cmp_priority (const struct list_elem *a,
-			  const struct list_elem *b,
-			  void *aux UNUSED) {
-    struct thread *ta = list_entry(a, struct thread, elem);
-    struct thread *tb = list_entry(b, struct thread, elem);
-    return ta->priority > tb->priority;
-}
-
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
@@ -398,7 +389,7 @@ thread_update_priority(struct thread *t)
 	t->priority = t->base_priority;
 	if (!list_empty(&(t->donors)))
 	{
-		struct thread *max_donor = list_entry(list_max(&t->donors, cmp_priority, NULL),
+		struct thread *max_donor = list_entry(list_max(&t->donors, cmp_priority, ASC),
                                          	  struct thread, donation_elem);
     	t->priority = MAX(t->priority, max_donor->priority);
 	}

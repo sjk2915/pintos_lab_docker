@@ -284,6 +284,8 @@ cond_init (struct condition *cond) {
 	list_init (&cond->waiters);
 }
 
+/* sema_elem->sema->waiters->priority로 요소 비교
+   AUX: ASC, DESC */
 static bool
 sema_cmp_priority (const struct list_elem *a,
                    const struct list_elem *b,

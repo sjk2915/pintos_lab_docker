@@ -141,16 +141,13 @@ void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 void thread_preempt (void);
 
-bool cmp_priority (const struct list_elem *a,
-				   const struct list_elem *b,
-				   void *aux UNUSED);
+bool cmp_priority(const struct list_elem *a,
+				  const struct list_elem *b,
+				  void *aux);
 int thread_get_priority (void);
 void thread_set_priority (int);
 void thread_donate_priority(struct thread *thrd, struct thread *donor);
 void thread_update_priority(struct thread *t);
-bool cmp_priority(const struct list_elem *a,
-				  const struct list_elem *b,
-				  void *aux);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
