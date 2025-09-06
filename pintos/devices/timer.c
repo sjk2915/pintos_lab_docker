@@ -152,16 +152,20 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
 
+	bool is_wake = false;
 	while (!list_empty(&sleep_list))
 	{
 		struct thread *cur = list_entry(list_front(&sleep_list), struct thread, elem);
 		if (cur->wakeup_tick <= ticks) {
 			list_pop_front(&sleep_list);
 			thread_unblock(cur);
+			is_wake = true;
 		} else {
 			break;
 		} 
 	}
+	// 깨어난게 있으면 우선순위 점검
+	if (is_wake) thread_preempt();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

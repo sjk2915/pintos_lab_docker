@@ -49,6 +49,9 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
+/* 우선순위 기부 깊이제한 */
+#define MAX_DONATION_DEPTH 8
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -62,6 +65,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static void thread_donate_recusively(struct thread *donor, int depth);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -206,9 +210,21 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-	if(thread_current ()->priority < t->priority)
-		thread_yield();
+	thread_preempt();
 	return tid;
+}
+
+/* priority 내림차순으로 요소 비교 */
+bool
+cmp_priority (const struct list_elem *a,
+			  const struct list_elem *b,
+			  void *aux) {
+    struct thread *ta = list_entry(a, struct thread, elem);
+    struct thread *tb = list_entry(b, struct thread, elem);
+	if (aux == ASC)
+    	return ta->priority < tb->priority;
+	else
+		return ta->priority > tb->priority;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -236,12 +252,11 @@ thread_block (void) {
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
-
 	ASSERT (is_thread (t));
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL);
+	list_insert_ordered (&ready_list, &t->elem, cmp_priority, DESC);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -293,6 +308,24 @@ thread_exit (void) {
 	NOT_REACHED ();
 }
 
+void
+thread_preempt (void)
+{
+	if (!list_empty(&ready_list))
+	{
+		struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
+		if (front->priority > thread_current()->priority)
+		{
+			// 인터럽트 중이면 예약
+			if (intr_context())
+				intr_yield_on_return();
+			// 아니면 즉시 yield
+			else
+				thread_yield();
+		}
+	}
+}
+
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
@@ -304,7 +337,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered (&ready_list, &curr->elem, cmp_priority, NULL);
+		list_insert_ordered (&ready_list, &curr->elem, cmp_priority, DESC);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -323,19 +356,52 @@ cmp_priority (const struct list_elem *a,
 void
 thread_set_priority (int new_priority) {
 	struct thread *cur = thread_current ();
-	cur->priority = new_priority;
-	if (!list_empty(&ready_list))
-	{
-		struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
-		if (front->priority > cur->priority)
-			thread_yield();
-	}
+	cur->base_priority = new_priority;
+	thread_update_priority(cur);
+	thread_preempt();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
+}
+
+/* 우선순위 기부 */
+void
+thread_donate_priority(struct thread *thrd, struct thread *donor)
+{
+	list_push_back(&(thrd->donors), &donor->donation_elem);
+	thread_donate_recusively(donor, 0);
+}
+
+/* thread_donate_priority용 내부 함수 */
+static void
+thread_donate_recusively(struct thread *donor, int depth)
+{
+    if (depth > MAX_DONATION_DEPTH) return;
+    struct lock *lock = donor->waiting_lock;
+    if (lock != NULL && lock->holder != NULL) {
+        struct thread *holder = lock->holder;
+        if (holder->priority < donor->priority) {
+            holder->priority = donor->priority;
+			// 재귀적으로 H->M->L 구현
+            thread_donate_recusively(holder, depth+1);
+        }
+    }
+}
+
+/* prioriy 업데이트 */
+void
+thread_update_priority(struct thread *t)
+{
+	t->priority = t->base_priority;
+	if (!list_empty(&(t->donors)))
+	{
+		struct thread *max_donor = list_entry(list_max(&t->donors, cmp_priority, NULL),
+                                         	  struct thread, donation_elem);
+    	t->priority = MAX(t->priority, max_donor->priority);
+	}
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -426,6 +492,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->base_priority = priority;
+	t->waiting_lock = NULL;
+	list_init(&(t->donors));
 	t->magic = THREAD_MAGIC;
 }
 

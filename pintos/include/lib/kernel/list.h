@@ -83,6 +83,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define ASC   ((void *)0)
+#define DESC  ((void *)1)
+
 /* List element. */
 struct list_elem {
 	struct list_elem *prev;     /* Previous list element. */
