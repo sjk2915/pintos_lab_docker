@@ -10,6 +10,7 @@
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #include "intrinsic.h"
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -58,20 +59,6 @@ static int load_avg;
 
 /* 우선순위 기부 깊이제한 */
 #define MAX_DONATION_DEPTH 8
-
-/* 17.14 고정 소수점 연산용 */
-#define F (1 << 14)
-#define int_to_fp(n) ((n) * F)
-#define fp_to_int(x) ((x) / F)
-#define fp_to_int_round(x) (((x) >= 0) ? (((x) + F/2)/F) : (((x) - F/2)/F))
-#define add_fp(x, y) ((x) + (y))
-#define sub_fp(x, y) ((x) - (y))
-#define add_fp_int(x, n) ((x) + (n) * (F))
-#define sub_fp_int(x, n) ((x) - (n) * (F))
-#define mult_fp(x, y) (((int64_t)(x)) * (y) / (F))
-#define div_fp(x, y) (((int64_t)(x)) * (F) / (y))
-#define mult_fp_int(x, n) ((x) * (n))
-#define div_fp_int(x, n) ((x) / (n))
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
