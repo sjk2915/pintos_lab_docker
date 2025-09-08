@@ -203,7 +203,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
   /* Add to run queue. */
   thread_unblock(t);
 
-  thread_preemption(t);
+  thread_preemption();
 
   return tid;
 }
@@ -234,7 +234,7 @@ void thread_unblock(struct thread *t)
 {
   enum intr_level old_level = intr_disable();
   ASSERT(t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &t->elem, compare_priority, 1);
+  list_insert_ordered(&ready_list, &t->elem, compare_priority, (void *)1);
   t->status = THREAD_READY;
   intr_set_level(old_level);
 }
@@ -292,7 +292,7 @@ void thread_yield(void)
   old_level = intr_disable();
   if (curr != idle_thread)
   {
-    list_insert_ordered(&ready_list, &curr->elem, compare_priority, 1);
+    list_insert_ordered(&ready_list, &curr->elem, compare_priority, (void *)1);
   }
   do_schedule(THREAD_READY);
   intr_set_level(old_level);
@@ -348,9 +348,14 @@ bool compare_priority(const struct list_elem *a,
     return ta->priority > tb->priority; // DESC 내림차순
 }
 
-void thread_preemption(struct thread *t)
+void thread_preemption()
 {
+  if (list_empty(&ready_list))
+  {
+    return;
+  }
   struct thread *cur = thread_current();
+  struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
   if (t->priority > cur->priority)
     if (intr_context())
     {
