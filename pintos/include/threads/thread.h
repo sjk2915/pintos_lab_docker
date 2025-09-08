@@ -148,6 +148,6 @@ bool compare_priority(const struct list_elem *a,
                       const struct list_elem *b,
                       void *aux);
 
-void thread_preemption();
+void thread_preemption(void);
 
 #endif /* threads/thread.h */

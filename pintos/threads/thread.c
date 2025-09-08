@@ -301,7 +301,18 @@ void thread_yield(void)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
+  if (thread_mlfqs)
+  {
+    return;
+  }
+  enum intr_level old_level;
+  old_level = intr_disable();
   thread_current()->priority = new_priority;
+  if (!list_empty(&ready_list) && list_entry(list_front(&ready_list), struct thread, elem)->priority > new_priority)
+  {
+    thread_preemption();
+  }
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -357,6 +368,7 @@ void thread_preemption()
   struct thread *cur = thread_current();
   struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
   if (t->priority > cur->priority)
+  {
     if (intr_context())
     {
       intr_yield_on_return();
@@ -365,6 +377,7 @@ void thread_preemption()
     {
       thread_yield();
     }
+  }
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
