@@ -475,7 +475,8 @@ thread_get_recent_cpu (void) {
 void
 thread_mlfqs_update_recent_cpu(void)
 {
-	// (2 * load_avg) / (2 * load_avg + 1) 계산
+	/* (2 * load_avg) / (2 * load_avg + 1) 계산
+	   계수는 공용이므로 한번만 계산해놓고 계속쓰기 */
 	int coef = div_fp(mult_fp_int(load_avg, 2),
 					  add_fp_int(mult_fp_int(load_avg, 2),
 					             1));
