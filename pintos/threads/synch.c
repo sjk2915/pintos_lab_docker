@@ -198,8 +198,21 @@ void lock_acquire(struct lock *lock)
   ASSERT(!intr_context());
   ASSERT(!lock_held_by_current_thread(lock));
 
+  struct thread *t = thread_current();
+  /* 락이 점유 중인 경우 대기 시작 */
+  if (lock->holder != NULL)
+  {
+    t->wait_lock = lock; // 기다리게 될 lock 저장
+    // 락 holder의 기부 리스트에 추가(리스트 내 우선 순위 계산은 nested_donation에서 할 것이므로 단순히 맨 뒤에 추가)
+    list_push_back(&lock->holder->donor_list, &t->donor_elem);
+    // 우선순위 기부 수행
+    nested_donation();
+  }
+
   sema_down(&lock->semaphore);
-  lock->holder = thread_current();
+
+  t->wait_lock = NULL;
+  lock->holder = t;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -233,6 +246,12 @@ void lock_release(struct lock *lock)
   ASSERT(lock_held_by_current_thread(lock));
 
   lock->holder = NULL;
+
+  /* donation 관련 코드 추가 */
+  remove_donor(lock);
+  recalc_priority();
+  lock->holder = NULL;
+
   sema_up(&lock->semaphore);
 }
 

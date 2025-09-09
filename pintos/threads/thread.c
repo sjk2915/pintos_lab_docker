@@ -305,14 +305,9 @@ void thread_set_priority(int new_priority)
   {
     return;
   }
-  enum intr_level old_level;
-  old_level = intr_disable();
-  thread_current()->priority = new_priority;
-  if (!list_empty(&ready_list) && list_entry(list_front(&ready_list), struct thread, elem)->priority > new_priority)
-  {
-    thread_preemption();
-  }
-  intr_set_level(old_level);
+  thread_current()->original_priority = new_priority;
+  recalc_priority();
+  thread_preemption();
 }
 
 /* Returns the current thread's priority. */
@@ -345,7 +340,8 @@ int thread_get_recent_cpu(void)
   return 0;
 }
 
-/* priority 내림차순으로 요소 비교 */
+/* 요소들의 우선순위 비교 함수
+ * aux 인자로 0을 넣을 경우 오름차순, 1을 넣을 경우 내림 차순 */
 bool compare_priority(const struct list_elem *a,
                       const struct list_elem *b,
                       void *aux)
@@ -380,6 +376,62 @@ void thread_preemption()
   }
 }
 
+/* dontation 관련 추가 함수 */
+
+void nested_donation()
+{
+  struct thread *t = thread_current();
+  int priority_for_donate = t->priority;
+  int depth = 0;
+
+  /* 중첩 기부 수행
+   * 일단 lock의 holder에게 먼저 기부하고 그 holder가 또 다른 lock을 기다리는 중이라면
+   * 체인을 타고 중첩으로 전파시킴 (최대 중첩 홧수 8로 설정) */
+  while (t->wait_lock && depth < 8)
+  {
+    t = t->wait_lock->holder;
+    t->priority = MAX(t->priority, priority_for_donate);
+    depth++;
+  }
+}
+
+void remove_donor(struct lock *lock)
+{
+  struct thread *t = thread_current();
+  if (list_empty(&t->donor_list))
+  {
+    return;
+  }
+
+  struct list_elem *le = list_begin(&t->donor_list);
+  struct thread *d;
+
+  while (le != list_end(&t->donor_list))
+  {
+    d = list_entry(le, struct thread, donor_elem);
+    if (d->wait_lock == lock)
+    {
+      list_remove(&d->donor_elem);
+    }
+    le = le->next;
+  }
+}
+
+void recalc_priority()
+{
+  struct thread *t = thread_current();
+  t->priority = t->original_priority;
+
+  if (list_empty(&t->donor_list))
+  {
+    return;
+  }
+
+  struct list_elem *max_donor_elem = list_max(&t->donor_list, compare_priority, (void *)0);
+  struct thread *max_donor = list_entry(max_donor_elem, struct thread, donor_elem);
+  t->priority = MAX(t->priority, max_donor->priority);
+}
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -389,7 +441,8 @@ void thread_preemption()
    blocks.  After that, the idle thread never appears in the
    ready list.  It is returned by next_thread_to_run() as a
    special case when the ready list is empty. */
-static void idle(void *idle_started_ UNUSED)
+static void
+idle(void *idle_started_ UNUSED)
 {
   struct semaphore *idle_started = idle_started_;
 
@@ -440,7 +493,12 @@ static void init_thread(struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy(t->name, name, sizeof t->name);
   t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
-  t->priority = priority;
+
+  /* donation 관련 코드 추가 */
+  t->priority = t->original_priority = priority;
+  list_init(&t->donor_list);
+  t->wait_lock = NULL;
+
   t->magic = THREAD_MAGIC;
 }
 

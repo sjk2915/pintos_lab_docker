@@ -95,6 +95,13 @@ struct thread
   int64_t wakeup_tick;       /* 이 스레드를 깨울 시각(tick) */
   /* Shared between thread.c and synch.c. */
   struct list_elem elem; /* List element. */
+  /* donation 관련 추가 */
+  int original_priority;       /* donation 이후 우선순위를 초기화하기 위해 초기 우선순위 값을 저장할 필드 */
+  struct lock *wait_lock;      /* 이 스레드가 대기하고 있는 lock을 저장할 필드 */
+  struct list donor_list;      /* multiple donation을 고려하기 위한 리스트 추가 */
+  struct list_elem donor_elem; /* donor_list를 위한 elem도 추가 */
+
+#define MAX(a, b) (a) > (b) ? (a) : (b)
 
 #ifdef USERPROG
   /* Owned by userprog/process.c. */
@@ -149,5 +156,14 @@ bool compare_priority(const struct list_elem *a,
                       void *aux);
 
 void thread_preemption(void);
+
+/* donation 관련 추가 함수 */
+
+/* 우선순위 중첩 기부 */
+void nested_donation(void);
+/* 락 해제 시 donor 제거 */
+void remove_donor(struct lock *lock);
+/* 스레드의 우선순위가 변경 되었을 때, donation을 고려하여 우선순위를 다시 계산 */
+void recalc_priority(void);
 
 #endif /* threads/thread.h */
