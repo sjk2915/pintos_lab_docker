@@ -24,9 +24,6 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
-/* 자는 쓰레드를 넣을 리스트 */
-static struct list sleep_list;
-
 static bool cmp_wakeup (const struct list_elem *a,
                   		const struct list_elem *b,
 						void *aux UNUSED);
@@ -47,8 +44,6 @@ timer_init (void) {
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
-
-	list_init (&sleep_list);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }

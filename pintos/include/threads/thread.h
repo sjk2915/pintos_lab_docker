@@ -5,10 +5,10 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/fixed-point.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
-
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -98,13 +98,12 @@ struct thread {
 	int64_t wakeup_tick;				/* 자고있는애가 일어날 시간 */
 
 	int nice;							/* 나이쓰 (-20 ~ 20) */
-	int recent_cpu;						/* 최근 cpu 사용량 fp로 저장됨!!! */
+	fp recent_cpu;						/* 최근 cpu 사용량 */
 
 	/* Shared between thread.c and synch.c. */
 	struct list donors;					/* 우선순위 기부해준 애들 리스트 */
 	struct list_elem elem;              /* List element. */	
 	struct list_elem donation_elem;		/* Donor List element. */
-	struct list_elem all_elem;			/* All List element. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -119,6 +118,10 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 };
+
+/* 자는 쓰레드를 넣을 리스트 
+   timer.c 에서도 써야됨 */
+extern struct list sleep_list;
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -151,7 +154,12 @@ bool cmp_priority(const struct list_elem *a,
 int thread_get_priority (void);
 void thread_set_priority (int);
 void thread_donate_priority(struct thread *thrd, struct thread *donor);
-void thread_update_priority(struct thread *t);
+void thread_update_priority(struct thread *t, void *aux UNUSED);
+
+/* 쓰레드를 업데이트하는 함수를 정의 */
+typedef void thread_update_func (struct thread *t, void *aux);
+void thread_update_all (thread_update_func *update, void *aux);
+
 void thread_mlfqs_update_priority(void);
 void thread_mlfqs_update_recent_cpu(void);
 void thread_mlfqs_update_load_avg(void);

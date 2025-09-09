@@ -2,6 +2,7 @@
 
 /* 17.14 고정 소수점 연산용 */
 
+typedef int32_t fp;
 // Suppose that we are using a p.q fixed-point format, and let f = 2^q
 #define F (1 << 14)
 // Convert n to fixed point

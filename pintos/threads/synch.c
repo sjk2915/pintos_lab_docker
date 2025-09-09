@@ -253,7 +253,7 @@ lock_release (struct lock *lock) {
 		}
 	}
 
-	thread_update_priority(lock->holder);
+	thread_update_priority(lock->holder, NULL);
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 }
