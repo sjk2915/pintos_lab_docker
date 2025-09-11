@@ -28,6 +28,11 @@ typedef int tid_t;
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63     /* Highest priority. */
 
+#define MAX(a, b) (a) > (b) ? (a) : (b)
+
+#define ASC (void *)0  /* 오름차순 */
+#define DESC (void *)1 /* 내림차순 */
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -100,8 +105,6 @@ struct thread
   struct lock *wait_lock;      /* 이 스레드가 대기하고 있는 lock을 저장할 필드 */
   struct list donor_list;      /* multiple donation을 고려하기 위한 리스트 추가 */
   struct list_elem donor_elem; /* donor_list를 위한 elem도 추가 */
-
-#define MAX(a, b) (a) > (b) ? (a) : (b)
 
 #ifdef USERPROG
   /* Owned by userprog/process.c. */

@@ -234,7 +234,7 @@ void thread_unblock(struct thread *t)
 {
   enum intr_level old_level = intr_disable();
   ASSERT(t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &t->elem, compare_priority, (void *)1);
+  list_insert_ordered(&ready_list, &t->elem, compare_priority, DESC);
   t->status = THREAD_READY;
   intr_set_level(old_level);
 }
@@ -292,7 +292,7 @@ void thread_yield(void)
   old_level = intr_disable();
   if (curr != idle_thread)
   {
-    list_insert_ordered(&ready_list, &curr->elem, compare_priority, (void *)1);
+    list_insert_ordered(&ready_list, &curr->elem, compare_priority, DESC);
   }
   do_schedule(THREAD_READY);
   intr_set_level(old_level);
@@ -341,15 +341,15 @@ int thread_get_recent_cpu(void)
 }
 
 /* 요소들의 우선순위 비교 함수
- * aux 인자로 0을 넣을 경우 오름차순, 1을 넣을 경우 내림 차순 */
+ * aux 인자로 0을 넣을 경우 오름차순, 1을 넣을 경우 내림차순 */
 bool compare_priority(const struct list_elem *a,
                       const struct list_elem *b,
                       void *aux)
 {
   struct thread *ta = list_entry(a, struct thread, elem);
   struct thread *tb = list_entry(b, struct thread, elem);
-  int mode = (int)(uintptr_t)aux;
-  if (mode == 0)
+
+  if (aux == ASC)
     return ta->priority < tb->priority; // ASC 오름차순
   else
     return ta->priority > tb->priority; // DESC 내림차순
@@ -408,12 +408,13 @@ void remove_donor(struct lock *lock)
 
   while (le != list_end(&t->donor_list))
   {
+    struct list_elem *next = le->next;
     d = list_entry(le, struct thread, donor_elem);
     if (d->wait_lock == lock)
     {
       list_remove(&d->donor_elem);
     }
-    le = le->next;
+    le = next;
   }
 }
 
@@ -427,7 +428,7 @@ void recalc_priority()
     return;
   }
 
-  struct list_elem *max_donor_elem = list_max(&t->donor_list, compare_priority, (void *)0);
+  struct list_elem *max_donor_elem = list_max(&t->donor_list, compare_priority, DESC);
   struct thread *max_donor = list_entry(max_donor_elem, struct thread, donor_elem);
   t->priority = MAX(t->priority, max_donor->priority);
 }
@@ -683,4 +684,12 @@ static tid_t allocate_tid(void)
   lock_release(&tid_lock);
 
   return tid;
+}
+
+static void schedule(void)
+{
+  struct thread *curr = running_thread();
+  struct thread *next = next_thread_to_run();
+
+  // ...
 }

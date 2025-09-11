@@ -67,7 +67,7 @@ void sema_down(struct semaphore *sema)
   old_level = intr_disable();
   while (sema->value == 0)
   {
-    list_insert_ordered(&sema->waiters, &thread_current()->elem, compare_priority, (void *)1);
+    list_push_back(&sema->waiters, &thread_current()->elem);
     thread_block();
   }
   sema->value--;
@@ -113,16 +113,13 @@ void sema_up(struct semaphore *sema)
   old_level = intr_disable();
   if (!list_empty(&sema->waiters))
   {
-    list_sort(&sema->waiters, compare_priority, (void *)1);
-    struct thread *thread_to_wake = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+    struct list_elem *max_waiter = list_max(&sema->waiters, compare_priority, ASC);
+    list_remove(max_waiter);
+    struct thread *thread_to_wake = list_entry(max_waiter, struct thread, elem);
     thread_unblock(thread_to_wake);
-    need_preemption = (thread_to_wake->priority > thread_current()->priority);
   }
   sema->value++;
-  if (need_preemption)
-  {
-    thread_preemption();
-  }
+  thread_preemption();
   intr_set_level(old_level);
 }
 
@@ -211,8 +208,8 @@ void lock_acquire(struct lock *lock)
 
   sema_down(&lock->semaphore);
 
-  t->wait_lock = NULL;
   lock->holder = t;
+  t->wait_lock = NULL;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -279,11 +276,18 @@ bool compare_priority_sema(const struct list_elem *a,
   struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
   struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
-  struct thread *ta = list_entry(list_front(&sa->semaphore.waiters), struct thread, elem);
-  struct thread *tb = list_entry(list_front(&sb->semaphore.waiters), struct thread, elem);
+  if (list_empty(&sa->semaphore.waiters))
+    return false;
+  if (list_empty(&sb->semaphore.waiters))
+    return true;
 
-  int mode = (int)(uintptr_t)aux;
-  if (mode == 0)
+  struct list_elem *max_wa = list_max(&sa->semaphore.waiters, compare_priority, ASC);
+  struct list_elem *max_wb = list_max(&sb->semaphore.waiters, compare_priority, ASC);
+
+  struct thread *ta = list_entry(max_wa, struct thread, elem);
+  struct thread *tb = list_entry(max_wb, struct thread, elem);
+
+  if (aux == ASC)
     return ta->priority < tb->priority; // ASC 오름차순
   else
     return ta->priority > tb->priority; // DESC 내림차순
@@ -351,7 +355,7 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 
   if (!list_empty(&cond->waiters))
   {
-    struct list_elem *max_waiter = list_max(&cond->waiters, compare_priority_sema, (void *)0);
+    struct list_elem *max_waiter = list_max(&cond->waiters, compare_priority_sema, ASC);
     list_remove(max_waiter);
     struct semaphore *s = &list_entry(max_waiter, struct semaphore_elem, elem)->semaphore;
     sema_up(s);
