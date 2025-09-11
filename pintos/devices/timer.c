@@ -31,6 +31,9 @@ static bool wakeup_less(const struct list_elem *a,
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+static bool cmp_wakeup (const struct list_elem *a,
+                  		const struct list_elem *b,
+						void *aux UNUSED);
 static intr_handler_func timer_interrupt;
 static bool too_many_loops(unsigned loops);
 static void busy_wait(int64_t loops);
@@ -99,6 +102,16 @@ timer_elapsed(int64_t then)
 	return timer_ticks() - then;
 }
 
+/* wakeup_tick 오름차순으로 요소 비교 */
+static bool
+cmp_wakeup (const struct list_elem *a,
+			 const struct list_elem *b,
+			 void *aux UNUSED) {
+    struct thread *ta = list_entry(a, struct thread, elem);
+    struct thread *tb = list_entry(b, struct thread, elem);
+    return ta->wakeup_tick < tb->wakeup_tick;
+}
+
 /* Suspends execution for approximately TICKS timer ticks. */
 void timer_sleep(int64_t ticks)
 {
@@ -111,15 +124,16 @@ void timer_sleep(int64_t ticks)
 	if (ticks <= 0)
 		return;
 
-	int64_t wake = timer_ticks() + ticks;
-
-	enum intr_level old = intr_disable();
+	ASSERT (intr_get_level () == INTR_ON);
 	struct thread *cur = thread_current();
-	cur->wakeup_tick = wake;
+	cur->wakeup_tick = start + ticks;
 
-	list_insert_ordered(&sleep_list, &cur->elem, wakeup_less, NULL);
+	// 인터럽트 끄기
+	enum intr_level old_level = intr_disable ();
+	list_insert_ordered(&sleep_list, &cur->elem, cmp_wakeup, NULL);
 	thread_block();
-	intr_set_level(old);
+	// 인터럽트 복원
+	intr_set_level (old_level);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -151,26 +165,37 @@ static void
 timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
-	bool woke = false;
+	thread_tick ();
 
-	while (!list_empty(&sleep_list))
+	// mlfqs면 
+	if (thread_mlfqs)
 	{
-		struct thread *t = list_entry(list_front(&sleep_list), struct thread, elem);
-		if (t->wakeup_tick <= ticks)
+		// 매 초마다 recent_cpu, load_avg 계산 
+		if (ticks % TIMER_FREQ == 0)
 		{
-			list_pop_front(&sleep_list);
-			thread_unblock(t);
-			woke = true;
+			thread_mlfqs_update_recent_cpu();
+			thread_mlfqs_update_load_avg();
 		}
-		else
-		{
-			break; 
-		}
+
+		// 매 4tick마다 priority 계산
+		if (ticks % 4 == 0)
+			thread_mlfqs_update_priority();
 	}
 
-	if (woke)
-		intr_yield_on_return(); // 더 높은 priority가 깨어났을 수 있음
-	thread_tick();
+	bool is_wake = false;
+	while (!list_empty(&sleep_list))
+	{
+		struct thread *cur = list_entry(list_front(&sleep_list), struct thread, elem);
+		if (cur->wakeup_tick <= ticks) {
+			list_pop_front(&sleep_list);
+			thread_unblock(cur);
+			is_wake = true;
+		} else {
+			break;
+		} 
+	}
+	// 깨어난게 있으면 우선순위 점검
+	if (is_wake) thread_preempt();
 }
 
 

@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "intr-stubs.h": "c",
+        "numbers": "c"
+    }
+}
