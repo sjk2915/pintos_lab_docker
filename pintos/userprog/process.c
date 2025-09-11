@@ -4,7 +4,7 @@
 #include <round.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include "string.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
@@ -163,9 +163,11 @@ error:
 int
 process_exec (void *f_name) {
 	/* 예시 process_exec("grep foo bar")
-	   -> grep(foo, bar) 가 되도록 */
+	   -> grep(foo, bar) 가 실행될 수 있도록 */
 	char *file_name = f_name;
 	bool success;
+
+	// 이거 써서 토큰 분리
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
