@@ -45,8 +45,6 @@ timer_init (void) {
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
 
-	list_init (&sleep_list);
-
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
 
