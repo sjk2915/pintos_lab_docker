@@ -162,6 +162,8 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
+	/* 예시 process_exec("grep foo bar")
+	   -> grep(foo, bar) 가 되도록 */
 	char *file_name = f_name;
 	bool success;
 
