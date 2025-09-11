@@ -121,6 +121,7 @@ thread_init (void) {
 	list_init (&ready_list);
 	list_init (&sleep_list);
 	list_init (&destruction_req);
+	
 
 	load_avg = 0;
 
