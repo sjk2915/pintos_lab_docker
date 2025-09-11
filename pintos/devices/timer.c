@@ -20,13 +20,6 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
-// project1-AlarmClock
-//  자는중인 스레드 리스트
-static struct list sleep_list;
-
-static bool wakeup_less(const struct list_elem *a,
-						const struct list_elem *b,
-						void *aux UNUSED);
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -115,15 +108,7 @@ cmp_wakeup (const struct list_elem *a,
 /* Suspends execution for approximately TICKS timer ticks. */
 void timer_sleep(int64_t ticks)
 {
-	// int64_t start = timer_ticks ();
-
-	// ASSERT (intr_get_level () == INTR_ON);
-	// while (timer_elapsed (start) < ticks)
-	// 	thread_yield ();
-
-	if (ticks <= 0)
-		return;
-
+	int64_t start = timer_ticks ();
 	ASSERT (intr_get_level () == INTR_ON);
 	struct thread *cur = thread_current();
 	cur->wakeup_tick = start + ticks;
@@ -261,11 +246,3 @@ real_time_sleep(int64_t num, int32_t denom)
 		busy_wait(loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
 	}
 }
-static bool
-wakeup_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
-	struct thread *ta = list_entry(a, struct thread, elem);
-	struct thread *tb = list_entry(b, struct thread, elem);
-	return ta->wakeup_tick < tb->wakeup_tick;
-}
-

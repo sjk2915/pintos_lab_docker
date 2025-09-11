@@ -122,7 +122,6 @@ thread_init (void) {
 	list_init (&sleep_list);
 	list_init (&destruction_req);
 	
-
 	load_avg = 0;
 
 	/* Set up a thread structure for the running thread. */
