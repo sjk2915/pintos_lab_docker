@@ -2,9 +2,9 @@
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
-#include <stdio.h>
+#include "lib/stdio.h"
 #include <stdlib.h>
-#include <string.h>
+#include "lib/string.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
@@ -49,6 +49,10 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+
+	// 첫 공백을 \0 으로 치환해서 file_name 끝을 알림
+	char *space = strchr(file_name, ' ');
+	if (space != NULL) *space = '\0';
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -202,11 +206,16 @@ process_exec (void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-	return -1;
+process_wait (tid_t child_tid) {
+	struct thread *child = thread_get_child(child_tid);
+	if (child == NULL) return -1;
+	
+	sema_down(&child->wait_sema);
+	int exit_status = child->exit_status;
+	list_remove(&child->exit_sema);
+	sema_up(&child->exit_sema);
+	
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -416,9 +425,63 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	// TODO: Your code goes here.
+	int argc = 0;
+	char *argv[32];
+	char *token, *save_ptr;
 
+	char *file_name_cpy = palloc_get_page(0);
+    if (file_name_cpy == NULL) {
+        return false;
+    }
+    strlcpy(file_name_cpy, file_name, PGSIZE);
+
+	// 토큰분리 및 저장
+	for (token = strtok_r(file_name_cpy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+		argv[argc++] = token;
+
+	// 문자열 푸쉬
+	char *addr[32];
+	for (int i=argc-1; i>=0; i--)
+	{
+		size_t size = strlen(argv[i]) + 1;
+		if_->rsp -= size;
+		memcpy((void *)if_->rsp, argv[i], size);
+		addr[i] = (char *)if_->rsp;
+	}
+
+	palloc_free_page(file_name_cpy);
+
+	// word-align
+	if (if_->rsp % 8 != 0)
+	{
+		uintptr_t old_rsp = if_->rsp;
+		if_->rsp = if_->rsp & -8;
+		size_t aligned_size = old_rsp - if_->rsp;
+		memset((void *)if_->rsp, 0, aligned_size);
+	}
+
+	// 끝 표시
+	size_t size = sizeof(char *);
+	if_->rsp -= size;
+	memset((void *)if_->rsp, 0, size);
+	// 포인터 푸쉬
+	for (int i=argc-1; i>=0; i--)
+	{
+		if_->rsp -= size;
+		memcpy((void *)if_->rsp, &addr[i], size);
+	}
+
+	// RDI
+	if_->R.rdi = argc;
+	// RSI
+	if_->R.rsi = if_->rsp;
+
+	// return address
+	if_->rsp -= size;
+	memset((void *)if_->rsp, 0, size);
+
+	// TODO: Implement argument passing (see project2/argument_passing.html). */
 	success = true;
 
 done:

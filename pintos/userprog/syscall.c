@@ -1,5 +1,5 @@
 #include "userprog/syscall.h"
-#include <stdio.h>
+#include "lib/kernel/stdio.h"
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -41,6 +41,32 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+	switch (f->R.rax)
+	{
+	case SYS_WAIT:
+		f->R.rax = sys_wait(f->R.rdi);
+		break;
+	case SYS_WRITE:
+		f->R.rax = sys_write(f->R.rdi, (const void*)f->R.rsi, f->R.rdx);
+		break;
+	default:
+		printf ("system call!\n");
+		thread_exit ();
+		break;
+	}
+}
+
+int sys_wait (pid_t)
+{
+	// 만들어야함
+}
+
+int sys_write (int fd, const void *buffer, unsigned length)
+{
+	// 콘솔에 냅다 붓기
+	if (fd == 1)
+	{
+		putbuf(buffer, length);
+		return length;
+	}
 }

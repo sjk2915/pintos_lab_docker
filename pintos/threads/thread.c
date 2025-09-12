@@ -210,6 +210,10 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+#ifdef USERPROG
+	list_push_back(&thread_current()->child_list, &t->child_elem);
+#endif
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -513,6 +517,20 @@ thread_mlfqs_update_recent_cpu(void)
 	thread_update_all(thread_update_recent_cpu, &coef);
 }
 
+struct thread
+*thread_get_child (tid_t child_tid)
+{
+	struct thread *cur = thread_current();
+	struct thread *t;
+	for (struct list_elem *e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
+	{
+		t = list_entry(e, struct thread, child_elem);
+		if (t->tid == child_tid)
+			return t;
+	}
+	return NULL;
+}
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -576,6 +594,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->waiting_lock = NULL;
 	list_init(&(t->donors));
 	t->magic = THREAD_MAGIC;
+
+#ifdef USERPROG
+	list_init(&t->child_list);
+	sema_init(&t->wait_sema, 0);
+#endif
 
 	if (!thread_mlfqs)
 	{
