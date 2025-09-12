@@ -6,6 +6,9 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/fixed-point.h"
+#ifdef USERPROG
+#include "threads/synch.h"
+#endif
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -108,6 +111,10 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	struct list child_list;
+	struct list_elem child_elem;
+	struct semaphore wait_sema;			/* wait용 */
+	struct semaphore exit_sema;			/* exit용 */
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -168,6 +175,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+struct thread *thread_get_child (tid_t child_tid);
 
 void do_iret (struct intr_frame *tf);
 

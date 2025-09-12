@@ -1,6 +1,14 @@
 {
     "files.associations": {
         "intr-stubs.h": "c",
-        "numbers": "c"
+        "numbers": "c",
+        "stdlib.h": "c",
+        "string.h": "c",
+        "gdt.h": "c",
+        "syscall.h": "c",
+        "stdio.h": "c",
+        "syscall-nr.h": "c",
+        "interrupt.h": "c",
+        "lib.h": "c"
     }
 }
