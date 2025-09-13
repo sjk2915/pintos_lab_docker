@@ -150,11 +150,11 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	// mlfqs면 
 	if (thread_mlfqs)
 	{
-		// 매 초마다 recent_cpu, load_avg 계산 
+		// 매 초마다 load_avg, recent_cpu 계산 
 		if (ticks % TIMER_FREQ == 0)
 		{
-			thread_mlfqs_update_recent_cpu();
 			thread_mlfqs_update_load_avg();
+			thread_mlfqs_update_recent_cpu();
 		}
 
 		// 매 4tick마다 priority 계산

@@ -6,10 +6,14 @@
 #include "threads/loader.h"
 #include "userprog/gdt.h"
 #include "threads/flags.h"
+#include "threads/init.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+static void check_ptr(void *addr);
 
 /* System call.
  *
@@ -43,20 +47,63 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	switch (f->R.rax)
 	{
+	case SYS_HALT:
+		sys_halt();
+		break;
 	case SYS_EXIT:
 		sys_exit(f->R.rdi);
-		break;	
+		break;
 	case SYS_WAIT:
 		f->R.rax = sys_wait(f->R.rdi);
 		break;
+	case SYS_CREATE:
+		f->R.rax = sys_create((const char*)f->R.rdi, f->R.rsi);
+		break;
+	case SYS_REMOVE:
+		f->R.rax = sys_remove((const char*)f->R.rdi);
+		break;
+	case SYS_OPEN:
+		f->R.rax = sys_open((const char*)f->R.rdi);
+		break;
+	case SYS_READ:
+		f->R.rax = sys_read(f->R.rdi, (const void*)f->R.rsi, f->R.rdx);
+		break;
 	case SYS_WRITE:
 		f->R.rax = sys_write(f->R.rdi, (const void*)f->R.rsi, f->R.rdx);
+		break;
+	case SYS_CLOSE:
+		sys_close(f->R.rdi);
 		break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
 		break;
 	}
+}
+
+static void check_ptr(void *ptr)
+{
+	if (ptr == NULL 												// null 포인터
+		|| is_kernel_vaddr(ptr) 									// 커널 메모리 침범
+		|| pml4_get_page(thread_current()->pml4, ptr) == NULL)		// 매핑안됨
+		sys_exit(-1);
+}
+
+static void check_fd(int fd)
+{
+	// 잘못된 fd 접근
+	if (fd < 0 || fd >= FDT_SIZE)
+		sys_exit(-1);
+
+	struct thread *cur = thread_current();
+	// 없는 fdt 접근
+	if (cur->fdt[fd] == NULL)
+		sys_exit(-1);
+}
+
+void sys_halt (void)
+{
+	power_off();
 }
 
 void sys_exit (int status)
@@ -69,7 +116,47 @@ void sys_exit (int status)
 
 int sys_wait (pid_t)
 {
-	// 만들어야함
+
+}
+
+bool sys_create (const char *file, unsigned initial_size)
+{
+	check_ptr(file);
+	return filesys_create(file, initial_size);
+}
+
+bool sys_remove (const char *file)
+{
+	check_ptr(file);
+	return filesys_remove(file);
+}
+
+int sys_open (const char *file)
+{
+	check_ptr(file);
+	struct thread *cur = thread_current();
+	struct file *new_file = filesys_open(file);
+	if (new_file == NULL) return -1;
+	for (int i=3; i<FDT_SIZE; i++)
+	{
+		if (cur->fdt[i] == NULL)
+		{
+			cur->fdt[i] = new_file;
+			return i;
+		}
+	}
+	// fdt 할당 실패
+	file_close(new_file);
+	return -1;
+}
+
+int sys_read (int fd, void *buffer, unsigned length)
+{
+	// 콘솔에서 읽기
+	if (fd == 0)
+	{
+
+	}
 }
 
 int sys_write (int fd, const void *buffer, unsigned length)
@@ -80,4 +167,12 @@ int sys_write (int fd, const void *buffer, unsigned length)
 		putbuf(buffer, length);
 		return length;
 	}
+}
+
+void sys_close (int fd)
+{
+	check_fd(fd);
+	struct thread *cur = thread_current();
+	file_close(cur->fdt[fd]);
+	cur->fdt[fd] = NULL;
 }

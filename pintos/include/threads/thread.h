@@ -31,6 +31,8 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define FDT_SIZE 64
+
 #define MAX(a, b) (a) > (b) ? (a) : (b)
 
 /* A kernel thread or user process.
@@ -116,6 +118,7 @@ struct thread {
 	struct semaphore wait_sema;			/* wait용 */
 	struct semaphore exit_sema;			/* exit용 */
 	int exit_status;
+	struct file *fdt[FDT_SIZE];
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
