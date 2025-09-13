@@ -10,4 +10,10 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (struct thread *next);
 
+// fork에 인자전달용 구조체
+struct fork_args {
+    struct thread *t;
+    struct intr_frame *if_;
+};
+
 #endif /* userprog/process.h */

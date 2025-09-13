@@ -1,19 +1,26 @@
 #include "userprog/syscall.h"
+#include "userprog/gdt.h"
+#include "userprog/process.h"
 #include "lib/kernel/stdio.h"
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
-#include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "devices/input.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 static void check_ptr(void *addr);
+
+/* Predefined file handles. */
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
 
 /* System call.
  *
@@ -53,6 +60,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXIT:
 		sys_exit(f->R.rdi);
 		break;
+	case SYS_FORK:
+		f->R.rax = sys_fork(f->R.rdi);
+		break;
 	case SYS_WAIT:
 		f->R.rax = sys_wait(f->R.rdi);
 		break;
@@ -64,6 +74,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_OPEN:
 		f->R.rax = sys_open((const char*)f->R.rdi);
+		break;
+	case SYS_FILESIZE:
+		f->R.rax = sys_filesize(f->R.rdi);
 		break;
 	case SYS_READ:
 		f->R.rax = sys_read(f->R.rdi, (const void*)f->R.rsi, f->R.rdx);
@@ -94,11 +107,6 @@ static void check_fd(int fd)
 	// 잘못된 fd 접근
 	if (fd < 0 || fd >= FDT_SIZE)
 		sys_exit(-1);
-
-	struct thread *cur = thread_current();
-	// 없는 fdt 접근
-	if (cur->fdt[fd] == NULL)
-		sys_exit(-1);
 }
 
 void sys_halt (void)
@@ -112,6 +120,12 @@ void sys_exit (int status)
 	cur->exit_status = status;
 	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 	thread_exit();
+}
+
+pid_t sys_fork (const char *thread_name)
+{
+	check_ptr(thread_name);
+	return process_fork(thread_name, &thread_current()->tf);
 }
 
 int sys_wait (pid_t)
@@ -150,22 +164,57 @@ int sys_open (const char *file)
 	return -1;
 }
 
+int sys_filesize(int fd)
+{
+	check_fd(fd);
+	struct thread *cur = thread_current();
+	if (cur->fdt[fd] == NULL) sys_exit(-1);
+	return file_length(cur->fdt[fd]);
+}
+
 int sys_read (int fd, void *buffer, unsigned length)
 {
-	// 콘솔에서 읽기
-	if (fd == 0)
+	check_fd(fd);
+	check_ptr(buffer);
+	// 콘솔입력에서 읽기
+	if (fd == STDIN_FILENO)
 	{
+		char *buf = buffer;
+		for (int i=0; i<length; i++)
+			buf[i] = input_getc();
+		return length;
+	}
 
+	// 콘솔출력에 읽기 금지
+	else if (fd == STDOUT_FILENO) return -1;
+
+	else
+	{
+		struct thread *cur = thread_current();
+		if (cur->fdt[fd] == NULL) sys_exit(-1);
+		return file_read(cur->fdt[fd], buffer, length);
 	}
 }
 
 int sys_write (int fd, const void *buffer, unsigned length)
 {
-	// 콘솔에 냅다 붓기
-	if (fd == 1)
+	check_fd(fd);
+	check_ptr(buffer);
+	// 콘솔입력에 쓰기 금지
+	if (fd == STDIN_FILENO) return -1;
+
+	// 콘솔출력에 냅다 붓기
+	else if (fd == STDOUT_FILENO)
 	{
 		putbuf(buffer, length);
 		return length;
+	}
+
+	else
+	{
+		struct thread *cur = thread_current();
+		if (cur->fdt[fd] == NULL) sys_exit(-1);
+		return file_write(cur->fdt[fd], buffer, length);
 	}
 }
 
@@ -173,6 +222,7 @@ void sys_close (int fd)
 {
 	check_fd(fd);
 	struct thread *cur = thread_current();
+	if (cur->fdt[fd] == NULL) sys_exit(-1);
 	file_close(cur->fdt[fd]);
 	cur->fdt[fd] = NULL;
 }

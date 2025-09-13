@@ -78,10 +78,12 @@ initd (void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+process_fork (const char *name, struct intr_frame *if_) {
+	struct fork_args *fork_args = palloc_get_page(PAL_ZERO);
+	fork_args->t = thread_current();
+	fork_args->if_ = if_;
 	/* Clone current thread to new thread.*/
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+	return thread_create (name, PRI_DEFAULT, __do_fork, fork_args);
 }
 
 #ifndef VM
@@ -122,12 +124,15 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       this function. */
 static void
 __do_fork (void *aux) {
+	struct fork_args *fork_args = (struct fork_args *) aux;
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
+	struct thread *parent = fork_args->t;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = fork_args->if_;
 	bool succ = true;
+
+	palloc_free_page(fork_args);
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
