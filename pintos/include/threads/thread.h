@@ -115,6 +115,7 @@ struct thread {
 	struct list_elem child_elem;
 	struct semaphore wait_sema;			/* wait용 */
 	struct semaphore exit_sema;			/* exit용 */
+	int exit_status;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

@@ -43,6 +43,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	switch (f->R.rax)
 	{
+	case SYS_EXIT:
+		sys_exit(f->R.rdi);
+		break;	
 	case SYS_WAIT:
 		f->R.rax = sys_wait(f->R.rdi);
 		break;
@@ -54,6 +57,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		thread_exit ();
 		break;
 	}
+}
+
+void sys_exit (int status)
+{
+	struct thread *cur = thread_current();
+	cur->exit_status = status;
+	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+	thread_exit();
 }
 
 int sys_wait (pid_t)

@@ -23,7 +23,7 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (int argc, char **argv, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -171,8 +171,6 @@ process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
-	// 이거 써서 토큰 분리
-
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
@@ -184,8 +182,16 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	int argc = 0;
+	char *argv[32];
+	char *token, *save_ptr;
+
+	// 토큰분리 및 저장
+	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+		argv[argc++] = token;
+
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load (argc, argv, &_if);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -214,7 +220,7 @@ process_wait (tid_t child_tid) {
 	
 	sema_down(&child->wait_sema);
 	int exit_status = child->exit_status;
-	list_remove(&child->exit_sema);
+	list_remove(&child->child_elem);
 	sema_up(&child->exit_sema);
 	
 	return exit_status;
@@ -223,12 +229,13 @@ process_wait (tid_t child_tid) {
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
-	struct thread *curr = thread_current ();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	struct thread *cur = thread_current ();
+	sema_up(&cur->wait_sema);
+	sema_down(&cur->exit_sema);
 	process_cleanup ();
 }
 
@@ -334,7 +341,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (int argc, char **argv, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
@@ -349,9 +356,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (argv[0]);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", argv[0]);
 		goto done;
 	}
 
@@ -363,7 +370,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+		printf ("load: %s: error loading executable\n", argv[0]);
 		goto done;
 	}
 
@@ -428,19 +435,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	if_->rip = ehdr.e_entry;
 
 	// TODO: Your code goes here.
-	int argc = 0;
-	char *argv[32];
-	char *token, *save_ptr;
-
-	char *file_name_cpy = palloc_get_page(0);
-    if (file_name_cpy == NULL) {
-        return false;
-    }
-    strlcpy(file_name_cpy, file_name, PGSIZE);
-
-	// 토큰분리 및 저장
-	for (token = strtok_r(file_name_cpy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
-		argv[argc++] = token;
 
 	// 문자열 푸쉬
 	char *addr[32];
@@ -451,8 +445,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		memcpy((void *)if_->rsp, argv[i], size);
 		addr[i] = (char *)if_->rsp;
 	}
-
-	palloc_free_page(file_name_cpy);
 
 	// word-align
 	if (if_->rsp % 8 != 0)
@@ -484,6 +476,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	memset((void *)if_->rsp, 0, size);
 
 	// TODO: Implement argument passing (see project2/argument_passing.html). */
+
+	// 디버그용
+	// hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true);
+
 	success = true;
 
 done:

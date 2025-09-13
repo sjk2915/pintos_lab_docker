@@ -1,2 +1,5 @@
+args-dbl-space FAIL
+args-multiple FAIL
 args-none FAIL
+args-many FAIL
 args-single FAIL
