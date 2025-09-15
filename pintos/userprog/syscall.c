@@ -7,9 +7,14 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+int sys_wait (pid_t pid);
+int sys_write (int fd, const void *buffer, unsigned length);
+void sys_exit(int status);
+
 
 /* System call.
  *
@@ -49,6 +54,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_WRITE:
 		f->R.rax = sys_write(f->R.rdi, (const void*)f->R.rsi, f->R.rdx);
 		break;
+	case SYS_EXIT:
+		sys_exit(f->R.rdi);
+		break;
+	case SYS_HALT:
+		sys_halt();
+		break;
+	case SYS_CREATE:
+		f->R.rax = sys_create(f->R.rdi, f->R.rsi);
+		break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
@@ -56,9 +70,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	}
 }
 
-int sys_wait (pid_t)
+int sys_wait (pid_t pid)
 {
-	// 만들어야함
+	return process_wait (pid);
 }
 
 int sys_write (int fd, const void *buffer, unsigned length)
@@ -69,4 +83,21 @@ int sys_write (int fd, const void *buffer, unsigned length)
 		putbuf(buffer, length);
 		return length;
 	}
+}
+
+void sys_exit(int status)
+{	
+	struct thread* cur = thread_current();
+	cur -> exit_status = status;
+	printf("%s: exit(%d)\n", cur -> name, status);
+	process_exit();
+}
+
+void sys_halt(void){
+	power_off();
+}
+
+bool sys_create (const char *file, unsigned initial_size){
+	
+	return filesys_create(file, initial_size);
 }

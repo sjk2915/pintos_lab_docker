@@ -1,2 +1,14 @@
-args-none FAIL
-args-single FAIL
+args-dbl-space PASS
+args-multiple PASS
+create-normal PASS
+create-long PASS
+create-bound PASS
+args-none PASS
+create-bad-ptr FAIL
+halt PASS
+create-null FAIL
+exit PASS
+args-many PASS
+create-exists PASS
+create-empty PASS
+args-single PASS

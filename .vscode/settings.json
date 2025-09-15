@@ -9,6 +9,12 @@
         "stdio.h": "c",
         "syscall-nr.h": "c",
         "interrupt.h": "c",
-        "lib.h": "c"
+        "lib.h": "c",
+        "thread.h": "c",
+        "loader.h": "c",
+        "flags.h": "c",
+        "intrinsic.h": "c",
+        "directory.h": "c",
+        "debug.h": "c"
     }
 }

@@ -50,12 +50,19 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
-	// 첫 공백을 \0 으로 치환해서 file_name 끝을 알림
-	char *space = strchr(file_name, ' ');
-	if (space != NULL) *space = '\0';
+	
+	// // 첫 공백을 \0 으로 치환해서 file_name 끝을 알림
+	// char *space = strchr(file_name, ' ');
+	// if (space != NULL) *space = '\0';
+	char thread_name[32];
+	strlcpy(thread_name, file_name, sizeof thread_name);
+	char* create_ptr;
+	char* prog = strtok_r(thread_name, " ", &create_ptr);
+	if(prog == NULL) prog = thread_name;
+
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (prog, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -207,26 +214,28 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid) {
-	struct thread *child = thread_get_child(child_tid);
-	if (child == NULL) return -1;
-	
-	sema_down(&child->wait_sema);
-	int exit_status = child->exit_status;
-	list_remove(&child->exit_sema);
-	sema_up(&child->exit_sema);
-	
-	return exit_status;
+	// 자식이 종료할 때까지 버티는 부모
+	// while(1); // 기존 무한 루프
+	//현재 스레드의 자식 리스트 모음에서 child_tid와 같은 자식 스레드를 찾아낸다. 
+	struct thread* child = thread_get_child (child_tid);
+	if(child == NULL) return -1;
+
+	sema_down(&child -> wait_sema); // 부모가 나 자식 덕분에 잠들게~ 하는거
+	int status = child -> exit_status; // 상태 호출 초기값 0으로 찍힐게
+	list_remove(&child -> child_elem);  // 기상했으니까 자식 리스트 제거
+	sema_up(&child -> exit_sema); // 그래 잠들어라 라고 함
+
+	return status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
+	// 나 종료할거라 부모에게 다시 말하는 자식
 	struct thread *curr = thread_current ();
-	/* TODO: Your code goes here.
-	 * TODO: Implement process termination message (see
-	 * TODO: project2/process_termination.html).
-	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	sema_up(&curr -> wait_sema); //  부모 기상
+	sema_down(&curr -> exit_sema); // 나 이제 그만할래 라고 선언
 	process_cleanup ();
 }
 
@@ -344,12 +353,19 @@ load (const char *file_name, struct intr_frame *if_) {
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
-	process_activate (thread_current ());
+	process_activate (thread_current ()); 
+
+
+	char* exec_name[32];
+	strlcpy(exec_name, file_name, sizeof exec_name);
+	char* exec_ptr;
+	char* prog = strtok_r(exec_name, " ", &exec_ptr);
+	if(prog == NULL) prog = exec_name;
 
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (prog);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", prog);
 		goto done;
 	}
 
@@ -425,61 +441,57 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	// TODO: Your code goes here.
-	int argc = 0;
-	char *argv[32];
-	char *token, *save_ptr;
+	char* token;
+    char* save_ptr;
+    char* argv[32];
+    int argc = 0;
 
-	char *file_name_cpy = palloc_get_page(0);
-    if (file_name_cpy == NULL) {
-        return false;
+    char* cmdline_copy = palloc_get_page(0);
+    
+    strlcpy(cmdline_copy, file_name, PGSIZE);
+
+    for(token = strtok_r(cmdline_copy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+        argv[argc++] = token;
     }
-    strlcpy(file_name_cpy, file_name, PGSIZE);
 
-	// 토큰분리 및 저장
-	for (token = strtok_r(file_name_cpy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
-		argv[argc++] = token;
+    uint64_t rsp = if_ -> rsp;
+    void* argv_user[32];
 
-	// 문자열 푸쉬
-	char *addr[32];
-	for (int i=argc-1; i>=0; i--)
-	{
-		size_t size = strlen(argv[i]) + 1;
-		if_->rsp -= size;
-		memcpy((void *)if_->rsp, argv[i], size);
-		addr[i] = (char *)if_->rsp;
-	}
+    for(int i = argc - 1; i >= 0; i--){
+        size_t len = strlen(argv[i]) + 1;
+        rsp -= len;
+        memcpy((void*)rsp, argv[i], len);
+        argv_user[i] = (void*)rsp;
+    }
 
-	palloc_free_page(file_name_cpy);
+    // 패딩(word-align)
+    while(rsp % 8 != 0){
+        rsp--;
+        *(uint8_t*)rsp = 0;
+    }
 
-	// word-align
-	if (if_->rsp % 8 != 0)
-	{
-		uintptr_t old_rsp = if_->rsp;
-		if_->rsp = if_->rsp & -8;
-		size_t aligned_size = old_rsp - if_->rsp;
-		memset((void *)if_->rsp, 0, aligned_size);
-	}
+    // argv[마지막]인데 NULL 값
+    rsp -= sizeof(char*);
+    *(char**)rsp = 0;
 
-	// 끝 표시
-	size_t size = sizeof(char *);
-	if_->rsp -= size;
-	memset((void *)if_->rsp, 0, size);
-	// 포인터 푸쉬
-	for (int i=argc-1; i>=0; i--)
-	{
-		if_->rsp -= size;
-		memcpy((void *)if_->rsp, &addr[i], size);
-	}
+    // 인자들의 주소값 넣어주기 - 뒤에서부터
+    for(int i = argc - 1; i >= 0; i--){
+        rsp -= sizeof(char*);
+        *(void**)rsp = argv_user[i];
+    }
 
-	// RDI
-	if_->R.rdi = argc;
-	// RSI
-	if_->R.rsi = if_->rsp;
+	void* argv_addr = (void*)rsp;
 
-	// return address
-	if_->rsp -= size;
-	memset((void *)if_->rsp, 0, size);
+	rsp -= sizeof(void*);
+	*(void**)rsp = 0;
+    
+    if_ -> R.rdi = argc;
+    if_ -> R.rsi = (uint64_t)argv_addr;
+	if_ -> rsp = rsp;
+
+    palloc_free_page(cmdline_copy);
+
+	// hex_dump(if_->rsp,if_->rsp,USER_STACK-if_->rsp,true);
 
 	// TODO: Implement argument passing (see project2/argument_passing.html). */
 	success = true;
