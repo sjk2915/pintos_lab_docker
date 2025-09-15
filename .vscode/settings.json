@@ -15,6 +15,13 @@
         "flags.h": "c",
         "intrinsic.h": "c",
         "directory.h": "c",
-        "debug.h": "c"
+        "debug.h": "c",
+        "atomic": "c",
+        "*.inc": "c",
+        "filesys.h": "c",
+        "inode.h": "c",
+        "off_t.h": "c",
+        "file.h": "c",
+        "list.h": "c"
     }
 }

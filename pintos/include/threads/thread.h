@@ -116,6 +116,7 @@ struct thread {
 	struct semaphore wait_sema;			/* wait용 */
 	struct semaphore exit_sema;			/* exit용 */
 	int exit_status;
+	struct file* fd_list[32];			/* 이건 어떤 파일이 열려있는지 확인용 */
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

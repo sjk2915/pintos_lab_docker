@@ -8,12 +8,11 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-int sys_wait (pid_t pid);
-int sys_write (int fd, const void *buffer, unsigned length);
-void sys_exit(int status);
+void file_check(const char* file);
 
 
 /* System call.
@@ -63,6 +62,18 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_CREATE:
 		f->R.rax = sys_create(f->R.rdi, f->R.rsi);
 		break;
+	case SYS_OPEN:
+		f->R.rax = sys_open(f->R.rdi);
+		break;
+	case SYS_CLOSE:
+		sys_close(f->R.rdi);
+		break;
+	case SYS_READ:
+		f->R.rax = sys_read(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
+	case SYS_FILESIZE:
+		f->R.rax = sys_filesize(f->R.rdi);
+		break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
@@ -83,6 +94,8 @@ int sys_write (int fd, const void *buffer, unsigned length)
 		putbuf(buffer, length);
 		return length;
 	}
+	else
+		return -1;
 }
 
 void sys_exit(int status)
@@ -97,7 +110,96 @@ void sys_halt(void){
 	power_off();
 }
 
+void file_check(const char* file){
+	//file이 null인지 체크
+	if(file == NULL) sys_exit(-1);
+	// 커널 영역에 있는지 없는지 체크
+	if(!is_user_vaddr(file)) sys_exit(-1);
+	// 실제로 할당된 메모리인지 아닌지(매핑되어 있는지)
+	struct thread* cur = thread_current();
+	if(pml4_get_page(cur -> pml4, file) == NULL){
+		sys_exit(-1);
+	}
+}
+
 bool sys_create (const char *file, unsigned initial_size){
+	
+	file_check(file);
 	
 	return filesys_create(file, initial_size);
 }
+
+int sys_open (const char *file){
+	int fd;
+	struct thread* cur = thread_current();
+
+	file_check(file);
+	
+	struct file* op_fl = filesys_open(file);
+
+	if(op_fl == NULL){
+		return -1;
+	}
+	else{
+		int idx = 2;
+		for(int i = 2; i< 32; i++){
+			if(cur -> fd_list[i] == NULL){
+				cur -> fd_list[i] = op_fl;
+				break;
+			}
+			idx++; 
+		}
+		if(idx == 32){
+			return -1;
+		}
+		else
+			return idx;
+	}
+}
+
+void sys_close(int fd){
+	struct thread* cur = thread_current();
+	
+	if(fd < 2 || fd >=32) return;
+
+	struct file* file = cur -> fd_list[fd];
+	if(cur -> fd_list[fd] == NULL) return;
+
+	// file_check(file);
+		
+	cur -> fd_list[fd] = NULL;
+	file_close(file);
+	
+}
+
+int sys_read(int fd, void* buffer, unsigned size){
+	struct thread* cur = thread_current();
+	int bytes_read = 0;
+
+	file_check((char*)buffer);
+	
+	if(fd < 0 || fd == 1 || fd >= 32) return -1;
+
+	if(fd == 0){
+		for(int i = 0; i < size; i++){
+			((char*)buffer)[i] = input_getc();
+		}
+		bytes_read = size;
+	}
+	else{
+		struct file* file = cur -> fd_list[fd];
+		if(file == NULL) return -1;
+
+		bytes_read = file_read(file, buffer, size);
+	}
+
+	return bytes_read;
+}
+
+int sys_filesize(int fd){
+	struct thread* cur = thread_current();
+	struct file* file = cur -> fd_list[fd];
+
+	return file_length(file);
+}
+

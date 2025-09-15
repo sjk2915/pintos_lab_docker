@@ -600,6 +600,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->exit_sema, 0);
 	t->exit_status = 0;
+	memset(t->fd_list, 0, sizeof t->fd_list);
 #endif
 
 	if (!thread_mlfqs)
