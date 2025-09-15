@@ -9,6 +9,7 @@
         "stdio.h": "c",
         "syscall-nr.h": "c",
         "interrupt.h": "c",
-        "lib.h": "c"
+        "lib.h": "c",
+        "string_view": "c"
     }
 }

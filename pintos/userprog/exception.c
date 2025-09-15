@@ -85,7 +85,7 @@ kill (struct intr_frame *f) {
 			   expected.  Kill the user process.  */
 			printf ("%s: dying due to interrupt %#04llx (%s).\n",
 					thread_name (), f->vec_no, intr_name (f->vec_no));
-			intr_dump_frame (f);
+			thread_current()->exit_status = -1;
 			thread_exit ();
 
 		case SEL_KCSEG:
@@ -129,6 +129,12 @@ page_fault (struct intr_frame *f) {
 	   that caused the fault (that's f->rip). */
 
 	fault_addr = (void *) rcr2();
+
+	if (fault_addr == NULL || (user && is_kernel_vaddr(fault_addr)))
+	{
+		kill(f);
+		return;
+	}
 
 	/* Turn interrupts back on (they were only off so that we could
 	   be assured of reading CR2 before it changed). */

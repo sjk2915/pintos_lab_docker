@@ -598,8 +598,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&t->child_list);
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->exit_sema, 0);
+	sema_init(&t->fork_sema, 0);
 	t->exit_status = 0;
-
+	t->exec = NULL;
 	for (int i=0; i<FDT_SIZE; i++)
 		t->fdt[i] = NULL;
 #endif

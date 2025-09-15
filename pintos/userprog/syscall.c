@@ -2,12 +2,14 @@
 #include "userprog/gdt.h"
 #include "userprog/process.h"
 #include "lib/kernel/stdio.h"
+#include "lib/string.h"
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
 #include "threads/flags.h"
 #include "threads/init.h"
+#include "threads/palloc.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
@@ -15,7 +17,26 @@
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+/* Projects 2 and later. */
 static void check_ptr(void *addr);
+static void check_fd(int fd);
+
+static void sys_halt (void);
+static void sys_exit (int status);
+static pid_t sys_fork (const char *thread_name, struct intr_frame *f);
+static int sys_exec (const char *cmd_line);
+static int sys_wait (pid_t pid);
+static bool sys_create (const char *file, unsigned initial_size);
+static bool sys_remove (const char *file);
+static int sys_open (const char *file);
+static int sys_filesize (int fd);
+static int sys_read (int fd, void *buffer, unsigned size);
+static int sys_write (int fd, const void *buffer, unsigned size);
+static void sys_seek (int fd, unsigned position);
+static unsigned sys_tell (int fd);
+static void sys_close (int fd);
+
+static int sys_dup2(int oldfd, int newfd);
 
 /* Predefined file handles. */
 #define STDIN_FILENO 0
@@ -50,7 +71,7 @@ syscall_init (void) {
 
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
 	switch (f->R.rax)
 	{
@@ -61,7 +82,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		sys_exit(f->R.rdi);
 		break;
 	case SYS_FORK:
-		f->R.rax = sys_fork(f->R.rdi);
+		f->R.rax = sys_fork((const char*)f->R.rdi, f);
+		break;
+	case SYS_EXEC:
+		f->R.rax = sys_exec((const char*)f->R.rdi);
 		break;
 	case SYS_WAIT:
 		f->R.rax = sys_wait(f->R.rdi);
@@ -83,6 +107,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_WRITE:
 		f->R.rax = sys_write(f->R.rdi, (const void*)f->R.rsi, f->R.rdx);
+		break;
+	case SYS_SEEK:
+		sys_seek(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_TELL:
+		f->R.rax = sys_tell(f->R.rdi);
 		break;
 	case SYS_CLOSE:
 		sys_close(f->R.rdi);
@@ -109,43 +139,55 @@ static void check_fd(int fd)
 		sys_exit(-1);
 }
 
-void sys_halt (void)
+static void sys_halt (void)
 {
 	power_off();
 }
 
-void sys_exit (int status)
+static void sys_exit (int status)
 {
 	struct thread *cur = thread_current();
 	cur->exit_status = status;
-	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 	thread_exit();
 }
 
-pid_t sys_fork (const char *thread_name)
+static pid_t sys_fork (const char *thread_name, struct intr_frame *f)
 {
 	check_ptr(thread_name);
-	return process_fork(thread_name, &thread_current()->tf);
+	return process_fork(thread_name, f);
 }
 
-int sys_wait (pid_t)
+static int sys_exec (const char *cmd_line)
 {
-
+	check_ptr(cmd_line);
+	char *cmd_cpy = palloc_get_page(PAL_ZERO);
+	if (cmd_cpy == NULL) return -1;
+	strlcpy(cmd_cpy, cmd_line, strlen(cmd_line)+1);
+	
+	// 실패하거나
+	if (process_exec(cmd_cpy) == -1) sys_exit(-1);
+	// 반환하지 않거나 - 여기도달하면 망한 함수
+	NOT_REACHED ();
 }
 
-bool sys_create (const char *file, unsigned initial_size)
+static int sys_wait (pid_t pid)
+{
+	return process_wait(pid);
+}
+
+static bool sys_create (const char *file, unsigned initial_size)
 {
 	check_ptr(file);
 	return filesys_create(file, initial_size);
 }
 
-bool sys_remove (const char *file)
+static bool sys_remove (const char *file)
 {
 	check_ptr(file);
 	return filesys_remove(file);
 }
 
-int sys_open (const char *file)
+static int sys_open (const char *file)
 {
 	check_ptr(file);
 	struct thread *cur = thread_current();
@@ -164,7 +206,7 @@ int sys_open (const char *file)
 	return -1;
 }
 
-int sys_filesize(int fd)
+static int sys_filesize(int fd)
 {
 	check_fd(fd);
 	struct thread *cur = thread_current();
@@ -172,7 +214,7 @@ int sys_filesize(int fd)
 	return file_length(cur->fdt[fd]);
 }
 
-int sys_read (int fd, void *buffer, unsigned length)
+static int sys_read (int fd, void *buffer, unsigned size)
 {
 	check_fd(fd);
 	check_ptr(buffer);
@@ -180,9 +222,9 @@ int sys_read (int fd, void *buffer, unsigned length)
 	if (fd == STDIN_FILENO)
 	{
 		char *buf = buffer;
-		for (int i=0; i<length; i++)
+		for (unsigned i=0; i<size; i++)
 			buf[i] = input_getc();
-		return length;
+		return size;
 	}
 
 	// 콘솔출력에 읽기 금지
@@ -192,11 +234,11 @@ int sys_read (int fd, void *buffer, unsigned length)
 	{
 		struct thread *cur = thread_current();
 		if (cur->fdt[fd] == NULL) sys_exit(-1);
-		return file_read(cur->fdt[fd], buffer, length);
+		return file_read(cur->fdt[fd], buffer, size);
 	}
 }
 
-int sys_write (int fd, const void *buffer, unsigned length)
+static int sys_write (int fd, const void *buffer, unsigned size)
 {
 	check_fd(fd);
 	check_ptr(buffer);
@@ -206,19 +248,35 @@ int sys_write (int fd, const void *buffer, unsigned length)
 	// 콘솔출력에 냅다 붓기
 	else if (fd == STDOUT_FILENO)
 	{
-		putbuf(buffer, length);
-		return length;
+		putbuf(buffer, size);
+		return size;
 	}
 
 	else
 	{
 		struct thread *cur = thread_current();
 		if (cur->fdt[fd] == NULL) sys_exit(-1);
-		return file_write(cur->fdt[fd], buffer, length);
+		return file_write(cur->fdt[fd], buffer, size);
 	}
 }
 
-void sys_close (int fd)
+static void sys_seek (int fd, unsigned position)
+{
+	check_fd(fd);
+	struct thread *cur = thread_current();
+	if (cur->fdt[fd] == NULL) sys_exit(-1);
+	file_seek(cur->fdt[fd], position);
+}
+
+static unsigned sys_tell (int fd)
+{
+	check_fd(fd);
+	struct thread *cur = thread_current();
+	if (cur->fdt[fd] == NULL) sys_exit(-1);
+	return file_tell(cur->fdt[fd]);
+}
+
+static void sys_close (int fd)
 {
 	check_fd(fd);
 	struct thread *cur = thread_current();

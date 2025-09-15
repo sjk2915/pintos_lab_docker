@@ -3,8 +3,8 @@
 #include <inttypes.h>
 #include <round.h>
 #include "lib/stdio.h"
+#include "lib/string.h"
 #include <stdlib.h>
-#include "string.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
@@ -79,11 +79,25 @@ initd (void *f_name) {
  * TID_ERROR if the thread cannot be created. */
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
-	struct fork_args *fork_args = palloc_get_page(PAL_ZERO);
-	fork_args->t = thread_current();
+	struct thread *cur = thread_current();
+	struct fork_args *fork_args = palloc_get_page(PAL_ZERO);	
+	if (fork_args == NULL) return TID_ERROR;
+	fork_args->t = cur;
 	fork_args->if_ = if_;
+
 	/* Clone current thread to new thread.*/
-	return thread_create (name, PRI_DEFAULT, __do_fork, fork_args);
+	tid_t child_tid = thread_create (name, PRI_DEFAULT, __do_fork, fork_args);
+	if (child_tid == TID_ERROR) 
+	{
+		palloc_free_page(fork_args);
+		return TID_ERROR;
+	}
+
+	sema_down(&cur->fork_sema);
+	struct thread *child = thread_get_child(child_tid);
+	if (child->exit_status == TID_ERROR) return TID_ERROR;
+
+	return child_tid;
 }
 
 #ifndef VM
@@ -98,21 +112,29 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kernel_vaddr(va)) return true;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
+	if (parent_page == NULL) return false;
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+	if (newpage == NULL) return false;
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable(pte);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+		palloc_free_page(newpage);
+		return false;
 	}
 	return true;
 }
@@ -125,17 +147,18 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct fork_args *fork_args = (struct fork_args *) aux;
-	struct intr_frame if_;
 	struct thread *parent = fork_args->t;
-	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = fork_args->if_;
-	bool succ = true;
-
 	palloc_free_page(fork_args);
+	struct thread *current = thread_current ();
+	struct intr_frame if_;
+	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	// 자식 프로세스의 return 값은 0!!!!!
+	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -157,14 +180,33 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	for (int i=0; i<FDT_SIZE; i++)
+	{
+		if (parent->fdt[i] != NULL)
+		{
+			current->fdt[i] = file_duplicate(parent->fdt[i]);
+			// duplicate 실패!
+			if (current->fdt[i] == NULL)
+			{
+				/* 여태까지 연거 정리하고
+				   에러처리 */
+				for (int j=0; j<i; j++)
+					if (current->fdt[j] != NULL)
+						file_close(current->fdt[j]);
+				goto error;
+			}
+		}
+	}
 
 	process_init ();
+	sema_up(&parent->fork_sema);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret (&if_);
 error:
-	thread_exit ();
+	sema_up(&parent->fork_sema);
+	process_cleanup ();
 }
 
 /* Switch the current execution context to the f_name.
@@ -208,7 +250,6 @@ process_exec (void *f_name) {
 	NOT_REACHED ();
 }
 
-
 /* Waits for thread TID to die and returns its exit status.  If
  * it was terminated by the kernel (i.e. killed due to an
  * exception), returns -1.  If TID is invalid or if it was not a
@@ -239,8 +280,26 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	struct thread *cur = thread_current ();
+	
+	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+
+	// exec 닫기
+	if (cur->exec != NULL)
+		file_close(cur->exec);
+
+	// fdt 정리
+	for (int i=0; i<FDT_SIZE; i++)
+	{
+		if (cur->fdt[i] != NULL)
+		{
+			file_close(cur->fdt[i]);
+			cur->fdt[i] = NULL;
+		}
+	}
+
 	sema_up(&cur->wait_sema);
 	sema_down(&cur->exit_sema);
+
 	process_cleanup ();
 }
 
@@ -367,6 +426,9 @@ load (int argc, char **argv, struct intr_frame *if_) {
 		goto done;
 	}
 
+	t->exec = file;
+	file_deny_write(file);
+
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
@@ -488,8 +550,7 @@ load (int argc, char **argv, struct intr_frame *if_) {
 	success = true;
 
 done:
-	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	if (!success) file_close(file);
 	return success;
 }
 

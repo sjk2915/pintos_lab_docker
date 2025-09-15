@@ -117,7 +117,9 @@ struct thread {
 	struct list_elem child_elem;
 	struct semaphore wait_sema;			/* wait용 */
 	struct semaphore exit_sema;			/* exit용 */
+	struct semaphore fork_sema;			/* fork용 */
 	int exit_status;
+	struct file *exec;
 	struct file *fdt[FDT_SIZE];
 #endif
 #ifdef VM
