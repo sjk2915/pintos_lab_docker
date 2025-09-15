@@ -86,16 +86,27 @@ int sys_wait (pid_t pid)
 	return process_wait (pid);
 }
 
-int sys_write (int fd, const void *buffer, unsigned length)
+int sys_write (int fd, const void *buffer, unsigned size)
 {
-	// 콘솔에 냅다 붓기
-	if (fd == 1)
-	{
-		putbuf(buffer, length);
-		return length;
+	if (fd == 1){
+		putbuf(buffer, size);
+		return size;
 	}
-	else
-		return -1;
+	struct thread* cur = thread_current();
+	int bytes_read = 0;
+
+	file_check((char*)buffer);
+	
+	if(fd < 0 || fd == 1 || fd >= 32) return -1;
+	else{
+		struct file* file = cur -> fd_list[fd];
+		if(file == NULL) return -1;
+
+		bytes_read = file_read(file, buffer, size);
+	}
+
+	return bytes_read;
+
 }
 
 void sys_exit(int status)
