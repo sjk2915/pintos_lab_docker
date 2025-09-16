@@ -31,7 +31,15 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-#define FDT_SIZE 64
+/* Predefined fd handles. */
+#define STDIN_FDNO (struct file *)1
+#define STDOUT_FDNO (struct file *)2
+#define STDERR_FDNO (struct file *)3
+
+#define IS_STDIO(filep) ((filep) == STDIN_FDNO || (filep) == STDOUT_FDNO || (filep) == STDERR_FDNO) ? true : false
+
+#define INITIAL_FDT_SIZE 4
+#define MAX_FDT_SIZE 512
 
 #define MAX(a, b) (a) > (b) ? (a) : (b)
 
@@ -120,7 +128,8 @@ struct thread {
 	struct semaphore fork_sema;			/* fork용 */
 	int exit_status;
 	struct file *exec;
-	struct file *fdt[FDT_SIZE];
+	struct file **fdt;
+	int fdt_size;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

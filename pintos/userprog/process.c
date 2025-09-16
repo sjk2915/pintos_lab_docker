@@ -95,7 +95,10 @@ process_fork (const char *name, struct intr_frame *if_) {
 
 	sema_down(&cur->fork_sema);
 	struct thread *child = thread_get_child(child_tid);
-	if (child->exit_status == TID_ERROR) return TID_ERROR;
+	if (child->exit_status == TID_ERROR) {
+		sema_up(&child->exit_sema);
+		return TID_ERROR;
+	}
 
 	return child_tid;
 }
@@ -176,25 +179,37 @@ __do_fork (void *aux) {
 #endif
 
 	/* TODO: Your code goes here.
-	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
-	 * TODO:       in include/filesys/file.h. Note that parent should not return
-	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/
-	for (int i=0; i<FDT_SIZE; i++)
+	* TODO: Hint) To duplicate the file object, use `file_duplicate`
+	* TODO:       in include/filesys/file.h. Note that parent should not return
+	* TODO:       from the fork() until this function successfully duplicates
+	* TODO:       the resources of parent.*/
+
+	if (current->fdt_size < parent->fdt_size)
+	{
+		struct file **new_fdt = (struct file**)realloc(current->fdt, parent->fdt_size * sizeof(struct file *));
+		if (new_fdt == NULL) goto error;
+
+		for (int i=0; i<parent->fdt_size; i++)
+			new_fdt[i] = NULL;
+
+		current->fdt = new_fdt;
+		current->fdt_size = parent->fdt_size;
+	}
+	
+	for (int i=0; i<current->fdt_size; i++)
 	{
 		if (parent->fdt[i] != NULL)
 		{
-			current->fdt[i] = file_duplicate(parent->fdt[i]);
-			// duplicate 실패!
-			if (current->fdt[i] == NULL)
+			if (IS_STDIO(parent->fdt[i]))
+				current->fdt[i] = parent->fdt[i];
+			else
 			{
-				/* 여태까지 연거 정리하고
-				   에러처리 */
-				for (int j=0; j<i; j++)
-					if (current->fdt[j] != NULL)
-						file_close(current->fdt[j]);
-				goto error;
+				if (is_dup2_file(parent->fdt[i]))
+					current->fdt[i] = file_duplicate2(parent->fdt[i]);
+				else
+					current->fdt[i] = file_duplicate(parent->fdt[i]);
 			}
+				
 		}
 	}
 
@@ -206,7 +221,8 @@ __do_fork (void *aux) {
 		do_iret (&if_);
 error:
 	sema_up(&parent->fork_sema);
-	process_cleanup ();
+	current->exit_status = -1;
+	thread_exit();
 }
 
 /* Switch the current execution context to the f_name.
@@ -280,22 +296,27 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	struct thread *cur = thread_current ();
-	
-	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 
 	// exec 닫기
 	if (cur->exec != NULL)
 		file_close(cur->exec);
 
 	// fdt 정리
-	for (int i=0; i<FDT_SIZE; i++)
+	for (int i=0; i<cur->fdt_size; i++)
 	{
 		if (cur->fdt[i] != NULL)
 		{
-			file_close(cur->fdt[i]);
-			cur->fdt[i] = NULL;
+			if (IS_STDIO(cur->fdt[i]))
+				cur->fdt[i] = NULL;
+			else
+			{
+				file_close(cur->fdt[i]);
+				cur->fdt[i] = NULL;
+			}
 		}
 	}
+	free(cur->fdt);
+	cur->fdt_size = 0;
 
 	sema_up(&cur->wait_sema);
 	sema_down(&cur->exit_sema);

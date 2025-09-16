@@ -2,6 +2,7 @@
 #define FILESYS_FILE_H
 
 #include "filesys/off_t.h"
+#include "filesys/inode.h"
 
 struct inode;
 
@@ -9,8 +10,11 @@ struct inode;
 struct file *file_open (struct inode *);
 struct file *file_reopen (struct file *);
 struct file *file_duplicate (struct file *file);
+struct file *file_duplicate2 (struct file *file);
 void file_close (struct file *);
 struct inode *file_get_inode (struct file *);
+
+bool is_dup2_file (struct file *file);
 
 /* Reading and writing. */
 off_t file_read (struct file *, void *, off_t);

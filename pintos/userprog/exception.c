@@ -83,9 +83,11 @@ kill (struct intr_frame *f) {
 		case SEL_UCSEG:
 			/* User's code segment, so it's a user exception, as we
 			   expected.  Kill the user process.  */
+			struct thread *cur = thread_current();
 			printf ("%s: dying due to interrupt %#04llx (%s).\n",
-					thread_name (), f->vec_no, intr_name (f->vec_no));
-			thread_current()->exit_status = -1;
+					cur->name, f->vec_no, intr_name (f->vec_no));
+			cur->exit_status = -1;
+			printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 			thread_exit ();
 
 		case SEL_KCSEG:
@@ -101,6 +103,7 @@ kill (struct intr_frame *f) {
 			   kernel. */
 			printf ("Interrupt %#04llx (%s) in unknown segment %04x\n",
 					f->vec_no, intr_name (f->vec_no), f->cs);
+			PANIC ("Unknown bug - unexpected interrupt in unknown code segment");
 			thread_exit ();
 	}
 }
@@ -130,16 +133,9 @@ page_fault (struct intr_frame *f) {
 
 	fault_addr = (void *) rcr2();
 
-	if (fault_addr == NULL || (user && is_kernel_vaddr(fault_addr)))
-	{
-		kill(f);
-		return;
-	}
-
 	/* Turn interrupts back on (they were only off so that we could
 	   be assured of reading CR2 before it changed). */
 	intr_enable ();
-
 
 	/* Determine cause. */
 	not_present = (f->error_code & PF_P) == 0;

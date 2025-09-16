@@ -8,6 +8,7 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
@@ -211,6 +212,13 @@ thread_create (const char *name, int priority,
 
 #ifdef USERPROG
 	list_push_back(&thread_current()->child_list, &t->child_elem);
+
+	t->fdt = (struct file**)calloc(INITIAL_FDT_SIZE, sizeof(struct file*));
+	t->fdt_size = INITIAL_FDT_SIZE;
+	t->fdt[0] = STDIN_FDNO;
+	t->fdt[1] = STDOUT_FDNO;
+	t->fdt[2] = STDERR_FDNO;
+	t->fdt[3] = NULL;
 #endif
 
 	/* Call the kernel_thread if it scheduled.
@@ -591,7 +599,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->waiting_lock = NULL;
-	list_init(&(t->donors));
+	list_init(&t->donors);
 	t->magic = THREAD_MAGIC;
 
 #ifdef USERPROG
@@ -601,8 +609,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 	sema_init(&t->fork_sema, 0);
 	t->exit_status = 0;
 	t->exec = NULL;
-	for (int i=0; i<FDT_SIZE; i++)
-		t->fdt[i] = NULL;
 #endif
 
 	if (!thread_mlfqs)

@@ -10,6 +10,8 @@
         "syscall-nr.h": "c",
         "interrupt.h": "c",
         "lib.h": "c",
-        "string_view": "c"
+        "string_view": "c",
+        "thread.h": "c",
+        "palloc.h": "c"
     }
 }
