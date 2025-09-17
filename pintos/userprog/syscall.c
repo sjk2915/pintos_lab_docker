@@ -121,8 +121,8 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = sys_dup2(f->R.rdi, f->R.rsi);
 		break;
 	default:
-		printf ("system call!\n");
-		thread_exit ();
+		printf ("not implemented system call!: %d\n", f->R.rax);
+		sys_exit (-1);
 		break;
 	}
 }
