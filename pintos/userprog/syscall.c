@@ -89,6 +89,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_SEEK:
 		sys_seek(f->R.rdi, f->R.rsi);
 		break;
+	case SYS_REMOVE:
+		f->R.rax = sys_remove(f->R.rdi);
+		break;
+	case SYS_TELL:
+		f->R.rax = sys_tell(f->R.rdi);
+		break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
@@ -264,3 +270,20 @@ void sys_seek(int fd, unsigned position){
 
 	file_seek(file, position);
 }
+
+bool sys_remove(const char* file){
+
+	file_check(file);
+
+	return filesys_remove(file);
+}
+
+unsigned tell(int fd){
+	if(fd < 2 || fd >=32) return -1;
+	struct thread* cur = thread_current();
+	struct file* file = cur -> fd_list[fd];
+	if(cur -> fd_list[fd] == NULL) return -1;
+
+	return file_tell (file);
+}
+
