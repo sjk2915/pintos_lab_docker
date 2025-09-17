@@ -234,10 +234,12 @@ process_exec (void *f_name) {
 	/* And then load the binary */
 	success = load (file_name, &_if);
 
+
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
+	// process_cleanup ();
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -305,7 +307,7 @@ process_cleanup (void) {
 		curr->pml4 = NULL;
 		pml4_activate (NULL);
 		pml4_destroy (pml4);
-	}
+	} // fdt 정리해야 한다. -> 고난예정....
 }
 
 /* Sets up the CPU for running user code in the nest thread.

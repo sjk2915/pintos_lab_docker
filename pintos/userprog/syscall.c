@@ -10,6 +10,10 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "userprog/process.h"
+#include <debug.h>
+#include <string.h>
+#include "threads/palloc.h"
+
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -79,6 +83,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_FORK:
 		f->R.rax = sys_fork(f->R.rdi);
 		break;
+	case SYS_EXEC:
+		f->R.rax = sys_exec(f->R.rdi);
+		break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
@@ -107,7 +114,7 @@ int sys_write (int fd, const void *buffer, unsigned size)
 		struct file* file = cur -> fd_list[fd];
 		if(file == NULL) return -1;
 
-		bytes_read = file_read(file, buffer, size);
+		bytes_read = file_write(file, buffer, size); // 이거 file_read -> file_write로 변경했음. 이유를 찾아야한다
 	}
 
 	return bytes_read;
@@ -226,4 +233,22 @@ pid_t sys_fork(const char* thread_name){
 	struct thread* parent = thread_current();
 
 	return process_fork(thread_name, &parent -> tf);
+}
+
+int sys_exec (const char *file){
+
+	file_check(file);
+
+	char* src = file; // 이거 없이 하고 싶으면 palloc_get_page(PAL_ZERO)로 사용해야함
+	char* kpage;
+	kpage = palloc_get_page(0);
+	if(kpage == NULL) sys_exit(-1);
+
+	strlcpy(kpage, src, PGSIZE);
+
+	if(process_exec(kpage) == -1){
+		sys_exit(-1);
+	}
+	
+	NOT_REACHED();
 }
