@@ -86,6 +86,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXEC:
 		f->R.rax = sys_exec(f->R.rdi);
 		break;
+	case SYS_SEEK:
+		sys_seek(f->R.rdi, f->R.rsi);
+		break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
@@ -251,4 +254,13 @@ int sys_exec (const char *file){
 	}
 	
 	NOT_REACHED();
+}
+
+void sys_seek(int fd, unsigned position){
+	if(fd < 2 || fd >=32) return;
+	struct thread* cur = thread_current();
+	struct file* file = cur -> fd_list[fd];
+	if(cur -> fd_list[fd] == NULL) return;
+
+	file_seek(file, position);
 }

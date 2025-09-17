@@ -1,5 +1,5 @@
 exec-bad-ptr PASS
-rox-simple FAIL
+rox-simple PASS
 fork-multiple PASS
 args-dbl-space PASS
 read-bad-fd PASS
@@ -7,15 +7,15 @@ args-multiple PASS
 create-normal PASS
 bad-write FAIL
 open-twice PASS
-exec-arg PASS
 exec-missing PASS
+exec-arg PASS
 read-bad-ptr PASS
 create-long PASS
 fork-close PASS
 fork-boundary PASS
-rox-multichild FAIL
 create-bound PASS
-rox-child FAIL
+rox-multichild PASS
+rox-child PASS
 read-normal PASS
 open-empty PASS
 open-null PASS

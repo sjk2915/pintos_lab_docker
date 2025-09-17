@@ -194,6 +194,7 @@ __do_fork (void *aux) {
 	for(int i = 2; i < 32; i++){
 		if(parent -> fd_list[i] == NULL) continue;
 		struct file* f_d = file_duplicate(parent -> fd_list[i]);
+		if(f_d == NULL) goto error;
 		current -> fd_list[i] = f_d;
 	}
 
@@ -228,18 +229,17 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
+
 	/* We first kill the current context */
 	process_cleanup ();
 
 	/* And then load the binary */
 	success = load (file_name, &_if);
 
-
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
-	// process_cleanup ();
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -278,8 +278,23 @@ process_exit (void) {
 	// 나 종료할거라 부모에게 다시 말하는 자식
 	struct thread *curr = thread_current ();
 
+	if(curr -> ROX != NULL){
+		file_close(curr -> ROX);
+		curr -> ROX = NULL;
+	}
+
 	sema_up(&curr -> wait_sema); //  부모 기상
 	sema_down(&curr -> exit_sema); // 나 이제 그만할래 라고 선언
+
+	
+	// for(int i = 2; i < 32; i++){
+	// 	if(curr -> fd_list[i] != NULL){
+	// 		file_close(curr -> fd_list[i]);
+	// 		curr -> fd_list[i] = NULL;
+	// 	}
+	// }
+	
+
 	process_cleanup ();
 }
 
@@ -400,7 +415,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ()); 
 
 
-	char* exec_name[32];
+	char exec_name[32];
 	strlcpy(exec_name, file_name, sizeof exec_name);
 	char* exec_ptr;
 	char* prog = strtok_r(exec_name, " ", &exec_ptr);
@@ -412,6 +427,10 @@ load (const char *file_name, struct intr_frame *if_) {
 		printf ("load: %s: open failed\n", prog);
 		goto done;
 	}
+
+	t -> ROX = file;
+	file_deny_write(t -> ROX);
+
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -542,7 +561,10 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	// file_close (file);
+	if(!success){
+		file_close(file);
+	}
 	return success;
 }
 

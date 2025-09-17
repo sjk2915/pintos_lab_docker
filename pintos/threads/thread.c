@@ -603,6 +603,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	memset(t->fd_list, 0, sizeof t->fd_list);
 	sema_init(&t->fork_sema, 0);
 	t->fork_ok = false;
+	t->ROX = NULL;  
 #endif
 
 	if (!thread_mlfqs)
