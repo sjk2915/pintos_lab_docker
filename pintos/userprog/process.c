@@ -80,7 +80,7 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
 	struct thread *cur = thread_current();
-	struct fork_args *fork_args = palloc_get_page(PAL_ZERO);	
+	struct fork_args *fork_args = (struct fork_args *)malloc(sizeof(struct fork_args *));
 	if (fork_args == NULL) return TID_ERROR;
 	fork_args->t = cur;
 	fork_args->if_ = if_;
@@ -89,7 +89,7 @@ process_fork (const char *name, struct intr_frame *if_) {
 	tid_t child_tid = thread_create (name, PRI_DEFAULT, __do_fork, fork_args);
 	if (child_tid == TID_ERROR) 
 	{
-		palloc_free_page(fork_args);
+		free(fork_args);
 		return TID_ERROR;
 	}
 
@@ -153,7 +153,7 @@ __do_fork (void *aux) {
 	struct thread *parent = fork_args->t;
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = fork_args->if_;
-	palloc_free_page(fork_args);
+	free(fork_args);
 	struct thread *current = thread_current ();
 	struct intr_frame if_;
 	bool succ = true;
