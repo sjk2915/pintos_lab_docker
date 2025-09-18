@@ -164,6 +164,7 @@ bool sys_create (const char *file, unsigned initial_size){
 int sys_open (const char *file){
 	int fd;
 	struct thread* cur = thread_current();
+	bool check = false;
 
 	file_check(file);
 	
@@ -172,21 +173,21 @@ int sys_open (const char *file){
 	if(op_fl == NULL){
 		return -1;
 	}
-	else{
-		int idx = 2;
-		for(int i = 2; i< 32; i++){
-			if(cur -> fd_list[i] == NULL){
-				cur -> fd_list[i] = op_fl;
-				break;
-			}
-			idx++; 
+	int idx;
+	for(int i = 2; i< 32; i++){
+		if(cur -> fd_list[i] == NULL){
+			cur -> fd_list[i] = op_fl;
+			check = true;
+			idx = i;
+			break;
 		}
-		if(idx == 32){
-			return -1;
-		}
-		else
-			return idx;
 	}
+	if(!check){
+		file_close(op_fl);
+		return -1;
+	}
+	else
+		return idx;
 }
 
 void sys_close(int fd){
@@ -194,13 +195,12 @@ void sys_close(int fd){
 	
 	if(fd < 2 || fd >=32) return;
 
-	struct file* file = cur -> fd_list[fd];
 	if(cur -> fd_list[fd] == NULL) return;
 
 	// file_check(file);
 		
+	file_close(cur -> fd_list[fd]);
 	cur -> fd_list[fd] = NULL;
-	file_close(file);
 	
 }
 
@@ -230,7 +230,10 @@ int sys_read(int fd, void* buffer, unsigned size){
 
 int sys_filesize(int fd){
 	struct thread* cur = thread_current();
+	if(fd < 0 || fd == 1 || fd >= 32) return -1;
+
 	struct file* file = cur -> fd_list[fd];
+	if(file == NULL) return -1;
 
 	return file_length(file);
 }
@@ -278,7 +281,7 @@ bool sys_remove(const char* file){
 	return filesys_remove(file);
 }
 
-unsigned tell(int fd){
+unsigned sys_tell(int fd){
 	if(fd < 2 || fd >=32) return -1;
 	struct thread* cur = thread_current();
 	struct file* file = cur -> fd_list[fd];

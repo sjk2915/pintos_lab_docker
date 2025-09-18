@@ -96,6 +96,9 @@ process_fork (const char *name, struct intr_frame *if_) {
 
 	struct parent_aux* aux;
 	aux = palloc_get_page (PAL_ZERO);
+	if(aux == NULL){
+		return TID_ERROR;
+	}
 	aux -> parent = thread_current();
 	aux -> parent_if = *if_;
 
@@ -105,10 +108,16 @@ process_fork (const char *name, struct intr_frame *if_) {
 		return TID_ERROR;
 	}
 	struct thread* child = thread_get_child(tid);
-	if(child == NULL) return TID_ERROR;
+	if(child == NULL){
+		return TID_ERROR;
+	} 
 	sema_down(&child -> fork_sema);
-	if(child -> fork_ok == false) return TID_ERROR;
 
+	if(child -> fork_ok == false){
+		// list_remove(&child -> child_elem); // 아니 이게 왜???
+		sema_up(&child -> exit_sema); // 정말 이게 왜?>??????
+		return TID_ERROR;
+	}
 	return tid;
 }
 
@@ -269,6 +278,8 @@ process_wait (tid_t child_tid) {
 	list_remove(&child -> child_elem);  // 기상했으니까 자식 리스트 제거
 	sema_up(&child -> exit_sema); // 그래 잠들어라 라고 함
 
+	// palloc_free_page(child);
+
 	return status;
 }
 
@@ -278,24 +289,26 @@ process_exit (void) {
 	// 나 종료할거라 부모에게 다시 말하는 자식
 	struct thread *curr = thread_current ();
 
+	for(int i = 2; i < 32; i++){
+		// if(curr -> fd_list[i] == NULL) continue;
+		file_close(curr -> fd_list[i]);
+		curr -> fd_list[i] = NULL;
+	}
+
+
 	if(curr -> ROX != NULL){
 		file_close(curr -> ROX);
 		curr -> ROX = NULL;
 	}
 
+
+
 	sema_up(&curr -> wait_sema); //  부모 기상
 	sema_down(&curr -> exit_sema); // 나 이제 그만할래 라고 선언
 
-	
-	// for(int i = 2; i < 32; i++){
-	// 	if(curr -> fd_list[i] != NULL){
-	// 		file_close(curr -> fd_list[i]);
-	// 		curr -> fd_list[i] = NULL;
-	// 	}
-	// }
-	
-
 	process_cleanup ();
+
+
 }
 
 /* Free the current process's resources. */
@@ -322,7 +335,8 @@ process_cleanup (void) {
 		curr->pml4 = NULL;
 		pml4_activate (NULL);
 		pml4_destroy (pml4);
-	} // fdt 정리해야 한다. -> 고난예정....
+	} 
+	
 }
 
 /* Sets up the CPU for running user code in the nest thread.
