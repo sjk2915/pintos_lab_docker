@@ -95,7 +95,8 @@ process_fork (const char *name, struct intr_frame *if_) {
 
 	sema_down(&cur->fork_sema);
 	struct thread *child = thread_get_child(child_tid);
-	if (child->exit_status == TID_ERROR) {
+	if (child->exit_status == TID_ERROR)
+	{
 		sema_up(&child->exit_sema);
 		return TID_ERROR;
 	}
@@ -207,9 +208,12 @@ __do_fork (void *aux) {
 				if (is_dup2_file(parent->fdt[i]))
 					current->fdt[i] = file_duplicate2(parent->fdt[i]);
 				else
-					current->fdt[i] = file_duplicate(parent->fdt[i]);
+				{
+					struct file *new_file = file_duplicate(parent->fdt[i]);
+					if (new_file == NULL) goto error;
+					current->fdt[i] = new_file;
+				}
 			}
-				
 		}
 	}
 
