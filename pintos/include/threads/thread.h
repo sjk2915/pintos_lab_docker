@@ -118,7 +118,7 @@ struct thread {
 	struct semaphore wait_sema;			/* wait용 */
 	struct semaphore exit_sema;			/* exit용 */
 	int exit_status;
-	struct file* fd_list[32];			/* 이건 어떤 파일이 열려있는지 확인용 */
+	struct file* fd_list[FDMAX];			/* 이건 어떤 파일이 열려있는지 확인용 */
 	struct semaphore fork_sema;			/* fork 할때 잠깐 대기한다는데 맞는가 몰라 */
 	bool fork_ok;						/* fork 잘 되었는지 아닌지 확인용*/
 	struct file* ROX;					/* ROX 전용 */

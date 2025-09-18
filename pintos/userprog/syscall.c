@@ -95,6 +95,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_TELL:
 		f->R.rax = sys_tell(f->R.rdi);
 		break;
+	// case SYS_DUP2:
+	// 	f->R.rax = sys_dup2(f->R.rdi, f->R.rsi);
+	// 	break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
@@ -118,7 +121,7 @@ int sys_write (int fd, const void *buffer, unsigned size)
 
 	file_check((char*)buffer);
 	
-	if(fd < 0 || fd == 1 || fd >= 32) return -1;
+	if(fd < 0 || fd == 1 || fd >= FDMAX) return -1;
 	else{
 		struct file* file = cur -> fd_list[fd];
 		if(file == NULL) return -1;
@@ -174,7 +177,7 @@ int sys_open (const char *file){
 		return -1;
 	}
 	int idx;
-	for(int i = 2; i< 32; i++){
+	for(int i = 2; i< FDMAX; i++){
 		if(cur -> fd_list[i] == NULL){
 			cur -> fd_list[i] = op_fl;
 			check = true;
@@ -193,7 +196,7 @@ int sys_open (const char *file){
 void sys_close(int fd){
 	struct thread* cur = thread_current();
 	
-	if(fd < 2 || fd >=32) return;
+	if(fd < 2 || fd >= FDMAX) return;
 
 	if(cur -> fd_list[fd] == NULL) return;
 
@@ -210,7 +213,7 @@ int sys_read(int fd, void* buffer, unsigned size){
 
 	file_check((char*)buffer);
 	
-	if(fd < 0 || fd == 1 || fd >= 32) return -1;
+	if(fd < 0 || fd == 1 || fd >= FDMAX) return -1;
 
 	if(fd == 0){
 		for(int i = 0; i < size; i++){
@@ -230,7 +233,7 @@ int sys_read(int fd, void* buffer, unsigned size){
 
 int sys_filesize(int fd){
 	struct thread* cur = thread_current();
-	if(fd < 0 || fd == 1 || fd >= 32) return -1;
+	if(fd < 0 || fd == 1 || fd >= FDMAX) return -1;
 
 	struct file* file = cur -> fd_list[fd];
 	if(file == NULL) return -1;
@@ -266,7 +269,7 @@ int sys_exec (const char *file){
 }
 
 void sys_seek(int fd, unsigned position){
-	if(fd < 2 || fd >=32) return;
+	if(fd < 2 || fd >= FDMAX) return;
 	struct thread* cur = thread_current();
 	struct file* file = cur -> fd_list[fd];
 	if(cur -> fd_list[fd] == NULL) return;
@@ -282,7 +285,7 @@ bool sys_remove(const char* file){
 }
 
 unsigned sys_tell(int fd){
-	if(fd < 2 || fd >=32) return -1;
+	if(fd < 2 || fd >= FDMAX) return -1;
 	struct thread* cur = thread_current();
 	struct file* file = cur -> fd_list[fd];
 	if(cur -> fd_list[fd] == NULL) return -1;
@@ -290,3 +293,12 @@ unsigned sys_tell(int fd){
 	return file_tell (file);
 }
 
+// int sys_dup2(int oldfd, int newfd){
+// 	struct thread* cur = thread_current();
+// 	if(oldfd < 2 || oldfd >= FDMAX) return -1;
+// 	if(cur -> fd_list[oldfd] == NULL) return -1;
+// 	if(newfd < 2 || newfd >= FDMAX) return -1;
+// 	if(cur -> fd_list[newfd] != NULL) return -1;
+
+
+// }

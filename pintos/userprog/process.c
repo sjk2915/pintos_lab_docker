@@ -200,7 +200,7 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	for(int i = 2; i < 32; i++){
+	for(int i = 2; i < FDMAX; i++){
 		if(parent -> fd_list[i] == NULL) continue;
 		struct file* f_d = file_duplicate(parent -> fd_list[i]);
 		if(f_d == NULL) goto error;
@@ -289,7 +289,7 @@ process_exit (void) {
 	// 나 종료할거라 부모에게 다시 말하는 자식
 	struct thread *curr = thread_current ();
 
-	for(int i = 2; i < 32; i++){
+	for(int i = 2; i < FDMAX; i++){
 		// if(curr -> fd_list[i] == NULL) continue;
 		file_close(curr -> fd_list[i]);
 		curr -> fd_list[i] = NULL;
