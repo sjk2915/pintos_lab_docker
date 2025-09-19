@@ -56,11 +56,6 @@ file_duplicate2 (struct file *file) {
 	return file;
 }
 
-bool
-is_dup2_file (struct file *file) {
-	return file->ref_cnt > 1 ? true : false;
-}
-
 /* Closes FILE. */
 void
 file_close (struct file *file) {

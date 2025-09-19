@@ -197,7 +197,7 @@ __do_fork (void *aux) {
 		current->fdt_size = parent->fdt_size;
 	}
 	
-	for (int i=0; i<current->fdt_size; i++)
+	for (int i=0; i<parent->fdt_size; i++)
 	{
 		if (parent->fdt[i] != NULL)
 		{
@@ -205,8 +205,9 @@ __do_fork (void *aux) {
 				current->fdt[i] = parent->fdt[i];
 			else
 			{
-				if (is_dup2_file(parent->fdt[i]))
-					current->fdt[i] = file_duplicate2(parent->fdt[i]);
+				int fd = check_duplicated(parent, i);
+				if (fd >= 0)
+					current->fdt[i] = file_duplicate2(current->fdt[fd]);
 				else
 				{
 					struct file *new_file = file_duplicate(parent->fdt[i]);
@@ -227,6 +228,18 @@ error:
 	sema_up(&parent->fork_sema);
 	current->exit_status = -1;
 	thread_exit();
+}
+
+int
+check_duplicated (struct thread *t, int old_fd)
+{
+	struct file *file = t->fdt[old_fd];
+	for (int i=0; i<old_fd; i++)
+	{
+		if (t->fdt[i] == file)
+			return i;
+	}
+	return -1;
 }
 
 /* Switch the current execution context to the f_name.
