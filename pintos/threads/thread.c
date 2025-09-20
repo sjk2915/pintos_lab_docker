@@ -13,6 +13,7 @@
 #include "intrinsic.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "threads/malloc.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -212,6 +213,24 @@ thread_create (const char *name, int priority,
 
 #ifdef USERPROG
 	list_push_back(&thread_current()->child_list, &t->child_elem);
+	t -> fd_list = (struct file**)calloc(FD_originsize, sizeof(struct file*));
+	
+	if(t -> fd_list == NULL){
+		palloc_free_page(t);
+		return TID_ERROR;
+	}
+
+	t -> fd_listsize = FD_originsize;
+
+	for(int i = 0; i < t -> fd_listsize; i++){
+		t -> fd_list[i] = NULL;
+	}
+
+	t -> fd_list[0] = fd_stdin;
+	t -> fd_list[1] = fd_stdout;
+	t -> fd_list[2] = fd_error;
+	
+
 #endif
 
 	/* Call the kernel_thread if it scheduled.
@@ -600,7 +619,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->exit_sema, 0);
 	t->exit_status = 0;
-	memset(t->fd_list, 0, sizeof t->fd_list);
+	// memset(t->fd_list, 0, sizeof t->fd_list);
 	sema_init(&t->fork_sema, 0);
 	t->fork_ok = false;
 	t->ROX = NULL;  

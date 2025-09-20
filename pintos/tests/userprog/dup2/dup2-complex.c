@@ -58,12 +58,12 @@ main (int argc UNUSED, char *argv[] UNUSED) {
 
   dup2 (dup2 (fd3, fd2), fd1);
   byte_cnt += read (fd2, buffer + byte_cnt, 10);
-  byte_cnt += read (fd1, buffer + byte_cnt, 10);
+  byte_cnt += read (fd1, buffer + byte_cnt, 10); // read는 여기까지 왔음
 
   for (fd5 = 10; fd5 == fd1 || fd5 == fd2 || fd5 == fd3 || fd5 == fd4; fd5++){}
   dup2 (1, fd5);
 
-  write (fd5, magic, sizeof magic - 1);
+  write (fd5, magic, sizeof magic - 1); // 유력 용의자
 
   create ("cheer", sizeof sample);
   create ("up", sizeof sample);
@@ -121,7 +121,7 @@ main (int argc UNUSED, char *argv[] UNUSED) {
 
   seek (1, 0);
 
-  if (strcmp (sample, buffer)) {
+  if (strcmp (sample, buffer)) { // 다음 용의자 buffer
     msg ("expected text:\n%s", sample);
     msg ("text actually read:\n%s", buffer);
     fail ("expected text differs from actual");

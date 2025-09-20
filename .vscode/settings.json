@@ -23,6 +23,8 @@
         "off_t.h": "c",
         "file.h": "c",
         "list.h": "c",
-        "process.h": "c"
+        "process.h": "c",
+        "random": "c",
+        "malloc.h": "c"
     }
 }

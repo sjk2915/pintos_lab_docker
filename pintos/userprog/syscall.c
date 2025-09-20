@@ -13,6 +13,7 @@
 #include <debug.h>
 #include <string.h>
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 
 
 void syscall_entry (void);
@@ -95,9 +96,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_TELL:
 		f->R.rax = sys_tell(f->R.rdi);
 		break;
-	// case SYS_DUP2:
-	// 	f->R.rax = sys_dup2(f->R.rdi, f->R.rsi);
-	// 	break;
+	case SYS_DUP2:
+		f->R.rax = sys_dup2(f->R.rdi, f->R.rsi);
+		break;
 	default:
 		printf ("system call!\n");
 		thread_exit ();
@@ -112,24 +113,28 @@ int sys_wait (pid_t pid)
 
 int sys_write (int fd, const void *buffer, unsigned size)
 {
-	if (fd == 1){
-		putbuf(buffer, size);
-		return size;
-	}
 	struct thread* cur = thread_current();
-	int bytes_read = 0;
+	int bytes_write = 0;
 
 	file_check((char*)buffer);
 	
-	if(fd < 0 || fd == 1 || fd >= FDMAX) return -1;
-	else{
-		struct file* file = cur -> fd_list[fd];
-		if(file == NULL) return -1;
-
-		bytes_read = file_write(file, buffer, size); // 이거 file_read -> file_write로 변경했음. 이유를 찾아야한다
+	if(fd < 0 || fd >= cur -> fd_listsize) return -1;
+	if(cur -> fd_list[fd] == fd_stdin || cur -> fd_list[fd] == fd_error){
+		return -1;
 	}
 
-	return bytes_read;
+	if (cur -> fd_list[fd] == fd_stdout){
+		putbuf(buffer, size);
+		return size;
+	}
+
+
+	struct file* file = cur -> fd_list[fd];
+	if(file == NULL) return -1;
+
+	bytes_write = file_write(file, buffer, size); 
+
+	return bytes_write;
 
 }
 
@@ -164,44 +169,69 @@ bool sys_create (const char *file, unsigned initial_size){
 	return filesys_create(file, initial_size);
 }
 
+int plus_fd_list(struct thread *t){
+	
+	int new_fdlistsize = t -> fd_listsize + 32;
+	if(new_fdlistsize > FD_maxsize) return -1;
+
+	struct file** new_fd_list = 
+	(struct file**)realloc(t -> fd_list, sizeof(struct file*) * new_fdlistsize);
+	
+	if(new_fd_list == NULL) return -1;
+
+	for(int i = t -> fd_listsize; i < new_fdlistsize; i++){
+		new_fd_list[i] = NULL;
+	}
+
+	t -> fd_list = new_fd_list;
+	t -> fd_listsize = new_fdlistsize;
+
+	return 0;
+}
+
+
+
+
 int sys_open (const char *file){
-	int fd;
+
 	struct thread* cur = thread_current();
-	bool check = false;
+	// bool check = false;
 
 	file_check(file);
-	
-	struct file* op_fl = filesys_open(file);
 
-	if(op_fl == NULL){
-		return -1;
-	}
-	int idx;
-	for(int i = 2; i< FDMAX; i++){
-		if(cur -> fd_list[i] == NULL){
-			cur -> fd_list[i] = op_fl;
-			check = true;
-			idx = i;
-			break;
+	struct file* op_fl = filesys_open(file);
+	if(op_fl == NULL) return -1;
+
+	while(1){
+
+		for(int i = 0; i< cur -> fd_listsize; i++){
+			if(cur -> fd_list[i] == NULL){
+				cur -> fd_list[i] = op_fl;
+				// check = true;
+				return i;
+			}
+		}
+		if(plus_fd_list(cur) < 0){
+			file_close(op_fl);
+			return -1;
 		}
 	}
-	if(!check){
-		file_close(op_fl);
-		return -1;
-	}
-	else
-		return idx;
+
 }
 
 void sys_close(int fd){
+
 	struct thread* cur = thread_current();
-	
-	if(fd < 2 || fd >= FDMAX) return;
+	if(fd < 0 || fd >= cur -> fd_listsize) return;
 
+	struct file* f = cur -> fd_list[fd];
 	if(cur -> fd_list[fd] == NULL) return;
-
-	// file_check(file);
-		
+	if(cur -> fd_list[fd] == fd_stdin || cur -> fd_list[fd] == fd_stdout || cur -> fd_list[fd] == fd_error){
+		return;
+	}
+	// if(cur -> fd_list[fd] != fd_stdin && cur -> fd_list[fd] != fd_stdout && cur -> fd_list[fd] != fd_error){
+	// 	file_close(cur -> fd_list[fd]);
+	// }
 	file_close(cur -> fd_list[fd]);
 	cur -> fd_list[fd] = NULL;
 	
@@ -213,9 +243,12 @@ int sys_read(int fd, void* buffer, unsigned size){
 
 	file_check((char*)buffer);
 	
-	if(fd < 0 || fd == 1 || fd >= FDMAX) return -1;
+	if(fd < 0 || fd >= cur -> fd_listsize) return -1;
+	if(cur -> fd_list[fd] == fd_stdout || cur -> fd_list[fd] == fd_error){
+		return -1;
+	}
 
-	if(fd == 0){
+	if(cur -> fd_list[fd] == fd_stdin){
 		for(int i = 0; i < size; i++){
 			((char*)buffer)[i] = input_getc();
 		}
@@ -233,9 +266,10 @@ int sys_read(int fd, void* buffer, unsigned size){
 
 int sys_filesize(int fd){
 	struct thread* cur = thread_current();
-	if(fd < 0 || fd == 1 || fd >= FDMAX) return -1;
+	if(fd < 0 || fd >= cur -> fd_listsize) return -1;
 
 	struct file* file = cur -> fd_list[fd];
+	if(file == fd_stdin || file == fd_stdout || file == fd_error) return -1;
 	if(file == NULL) return -1;
 
 	return file_length(file);
@@ -269,10 +303,12 @@ int sys_exec (const char *file){
 }
 
 void sys_seek(int fd, unsigned position){
-	if(fd < 2 || fd >= FDMAX) return;
 	struct thread* cur = thread_current();
 	struct file* file = cur -> fd_list[fd];
-	if(cur -> fd_list[fd] == NULL) return;
+	
+	if(fd < 0 || fd >= cur -> fd_listsize) return;
+	if(file == fd_stdin || file == fd_stdout || file == fd_error) return;
+	if(file == NULL) return;
 
 	file_seek(file, position);
 }
@@ -285,20 +321,50 @@ bool sys_remove(const char* file){
 }
 
 unsigned sys_tell(int fd){
-	if(fd < 2 || fd >= FDMAX) return -1;
 	struct thread* cur = thread_current();
 	struct file* file = cur -> fd_list[fd];
-	if(cur -> fd_list[fd] == NULL) return -1;
+	if(fd < 0 || fd >= cur -> fd_listsize) return -1;
+	if(file == fd_error || file == fd_stdin || file == fd_stdout) return -1;
+	if(file == NULL) return -1;
 
 	return file_tell (file);
 }
 
-// int sys_dup2(int oldfd, int newfd){
-// 	struct thread* cur = thread_current();
-// 	if(oldfd < 2 || oldfd >= FDMAX) return -1;
-// 	if(cur -> fd_list[oldfd] == NULL) return -1;
-// 	if(newfd < 2 || newfd >= FDMAX) return -1;
-// 	if(cur -> fd_list[newfd] != NULL) return -1;
+int sys_dup2(int oldfd, int newfd){
+	struct thread* cur = thread_current();
+	if(oldfd < 0 || oldfd >= cur -> fd_listsize) return -1;
+	if(cur -> fd_list[oldfd] == NULL) return -1;
+	
+	// if(cur -> fd_listsize < newfd){
+	// 	cur -> fd_list = (struct file**)realloc(cur -> fd_list, sizeof(struct file**) * newfd + 1);
+	// 	if(cur -> fd_list == NULL) return -1;
+	// 	for(int i = cur -> fd_listsize; i < newfd+1; i++){
+	// 		cur -> fd_list[i] = NULL;
+	// 	}
+	// 	cur -> fd_listsize = newfd + 1;
+	// }
 
+	while(newfd >= cur -> fd_listsize){
+		if(plus_fd_list(cur) < 0) return -1;
+	}
 
-// }
+	if(newfd < 0 || newfd >= cur -> fd_listsize) return -1;
+	if(cur -> fd_list[newfd] == cur -> fd_list[oldfd]) return newfd;
+
+	if(cur -> fd_list[newfd] != NULL){
+		if(cur -> fd_list[newfd] != fd_stdin && cur -> fd_list[newfd] != fd_stdout && cur -> fd_list[newfd] != fd_error){
+			file_close(cur -> fd_list[newfd]);
+		}
+	}
+
+	if(cur -> fd_list[oldfd] == fd_stdin || cur -> fd_list[oldfd] == fd_stdout || cur -> fd_list[oldfd] == fd_error){
+		cur -> fd_list[newfd] = cur -> fd_list[oldfd];
+	}
+	else{
+		cur -> fd_list[newfd] = cur -> fd_list[oldfd];
+		file_duplicate2(cur -> fd_list[oldfd]);
+	}
+
+	return newfd;
+
+}

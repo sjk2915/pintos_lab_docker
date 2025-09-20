@@ -200,11 +200,48 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	for(int i = 2; i < FDMAX; i++){
+
+	if(parent -> fd_listsize > current -> fd_listsize){
+		current -> fd_list = (struct file**)realloc(current -> fd_list, sizeof(struct file**)*parent -> fd_listsize);
+		if(current -> fd_list == NULL) goto error;
+		for(int i = current -> fd_listsize; i < parent -> fd_listsize; i++){
+			current -> fd_list[i] = NULL;
+		}
+		current -> fd_listsize = parent -> fd_listsize;
+	}
+
+
+	for(int i = 0; i < parent -> fd_listsize; i++){
 		if(parent -> fd_list[i] == NULL) continue;
-		struct file* f_d = file_duplicate(parent -> fd_list[i]);
-		if(f_d == NULL) goto error;
-		current -> fd_list[i] = f_d;
+		
+		if(parent -> fd_list[i] == fd_stdin || 
+			parent -> fd_list[i] == fd_stdout || parent -> fd_list[i] == fd_error){
+				current -> fd_list[i] = parent -> fd_list[i];
+				continue;
+		}
+
+		int idx;
+		bool good = false;
+		for(int j = 0; j < current -> fd_listsize; j++){
+			// 자식 fd_list를 한 바퀴 순회하는데 없을 경우 duplicate를 실행하고
+			// 있을 경우에는 그대로 주소값 삽입
+
+			if(current -> fd_list[j] == parent -> fd_list[i]){
+				idx = j;
+				good = true;
+				break;
+			}
+		}	
+		
+		if(good){
+			current -> fd_list[i] = current -> fd_list[idx];
+		}
+		else{
+			struct file* f_d = file_duplicate(parent -> fd_list[i]);
+			if(f_d == NULL) goto error;
+			current -> fd_list[i] = f_d;
+		}
+		
 	}
 
 	process_init ();
@@ -289,11 +326,14 @@ process_exit (void) {
 	// 나 종료할거라 부모에게 다시 말하는 자식
 	struct thread *curr = thread_current ();
 
-	for(int i = 2; i < FDMAX; i++){
-		// if(curr -> fd_list[i] == NULL) continue;
+	for(int i = 0; i < curr -> fd_listsize; i++){
+		if(curr -> fd_list[i] == NULL || curr -> fd_list[i] == fd_stdin || 
+			curr -> fd_list[i] == fd_stdout || curr -> fd_list[i] == fd_error) continue;
 		file_close(curr -> fd_list[i]);
 		curr -> fd_list[i] = NULL;
 	}
+	free(curr -> fd_list);
+	curr -> fd_listsize = 0;
 
 
 	if(curr -> ROX != NULL){
@@ -302,12 +342,10 @@ process_exit (void) {
 	}
 
 
-
 	sema_up(&curr -> wait_sema); //  부모 기상
 	sema_down(&curr -> exit_sema); // 나 이제 그만할래 라고 선언
 
 	process_cleanup ();
-
 
 }
 
