@@ -212,8 +212,13 @@ thread_create (const char *name, int priority,
 
 #ifdef USERPROG
 	list_push_back(&thread_current()->child_list, &t->child_elem);
-
-	t->fdt = (struct file**)calloc(INITIAL_FDT_SIZE, sizeof(struct file*));
+	struct file** fdt = (struct file**)malloc(INITIAL_FDT_SIZE * sizeof(struct file*));
+	if (fdt == NULL)
+	{
+		palloc_free_page(t);
+		return TID_ERROR;
+	}
+	t->fdt = fdt;
 	t->fdt_size = INITIAL_FDT_SIZE;
 	t->fdt[0] = STDIN_FDNO;
 	t->fdt[1] = STDOUT_FDNO;

@@ -162,7 +162,7 @@ static int extend_fdt(struct thread *t)
 	// 두배씩 늘리기
 	int new_size = t->fdt_size * 2;
 	if (new_size > MAX_FDT_SIZE) return -1;
-	struct file **new_fdt = (struct file **)realloc(t->fdt, sizeof(struct file *) * new_size);
+	struct file **new_fdt = (struct file **)realloc(t->fdt, new_size * sizeof(struct file *));
 	if (new_fdt == NULL) return -1;
 
 	// 초기화
