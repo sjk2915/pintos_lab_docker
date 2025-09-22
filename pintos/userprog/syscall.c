@@ -1,5 +1,7 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -7,40 +9,312 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "threads/vaddr.h"
+#include "threads/palloc.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "threads/synch.h"
+#include "threads/init.h"
 
-void syscall_entry (void);
-void syscall_handler (struct intr_frame *);
+#define MSR_STAR 0xc0000081
+#define MSR_LSTAR 0xc0000082
+#define MSR_SYSCALL_MASK 0xc0000084
 
-/* System call.
- *
- * Previously system call services was handled by the interrupt handler
- * (e.g. int 0x80 in linux). However, in x86-64, the manufacturer supplies
- * efficient path for requesting the system call, the `syscall` instruction.
- *
- * The syscall instruction works by reading the values from the the Model
- * Specific Register (MSR). For the details, see the manual. */
+void syscall_entry(void);
+void syscall_handler(struct intr_frame *);
+static void check_address(void *addr);
+static void release_fd(int fd);
+static int allocate_fd(struct file *file);
+static struct file *get_file(int fd);
+static void check_buffer(void *buffer, unsigned size);
+static struct lock filesys_lock;
 
-#define MSR_STAR 0xc0000081         /* Segment selector msr */
-#define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
-#define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
+void syscall_init(void)
+{
+    write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48 |
+                            ((uint64_t)SEL_KCSEG) << 32);
+    write_msr(MSR_LSTAR, (uint64_t)syscall_entry);
+    write_msr(MSR_SYSCALL_MASK,
+              FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 
-void
-syscall_init (void) {
-	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
-			((uint64_t)SEL_KCSEG) << 32);
-	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
-
-	/* The interrupt service rountine should not serve any interrupts
-	 * until the syscall_entry swaps the userland stack to the kernel
-	 * mode stack. Therefore, we masked the FLAG_FL. */
-	write_msr(MSR_SYSCALL_MASK,
-			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+    lock_init(&filesys_lock);
 }
 
-/* The main system call interface */
-void
-syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+void syscall_handler(struct intr_frame *f)
+{
+    uint64_t nr = f->R.rax;
+
+    switch (nr)
+    {
+    case SYS_HALT:
+        power_off();
+        break;
+
+    case SYS_EXIT:
+    {
+        int status = (int)f->R.rdi;
+        struct thread *cur = thread_current();
+        cur->exit_status = status;
+        printf("%s: exit(%d)\n", cur->name, status);
+        thread_exit();
+    }
+    break;
+
+    // case SYS_WRITE:
+    // {
+    //     int fd = (int)f->R.rdi;
+    //     const void *buffer = (const void *)f->R.rsi;
+    //     unsigned size = (unsigned)f->R.rdx;
+
+    //     check_address((void *)buffer);
+
+    //     if (fd == 1)
+    //     {
+    //         putbuf((const char *)buffer, size);
+    //         f->R.rax = size;
+    //     }
+    //     else
+    //     {
+    //         f->R.rax = -1;
+    //     }
+    // }
+    // break;
+    case SYS_WRITE:
+    {
+        int fd = (int)f->R.rdi;
+        const void *buffer = (const void *)f->R.rsi;
+        unsigned size = (unsigned)f->R.rdx;
+
+        check_buffer((void *)buffer, size); // 이렇게 변경
+
+        if (fd == 1)
+        {
+            // stdout에 쓰기
+            putbuf((const char *)buffer, size);
+            f->R.rax = size;
+        }
+        else if (fd == 0)
+        {
+            // stdin에 쓰기 시도 - 에러
+            f->R.rax = -1;
+        }
+        else
+        {
+            // 일반 파일에 쓰기 구현
+            struct file *file = get_file(fd);
+            if (file == NULL)
+            {
+                f->R.rax = -1;
+                break;
+            }
+
+            lock_acquire(&filesys_lock);
+            int bytes_written = file_write(file, buffer, size);
+            lock_release(&filesys_lock);
+
+            f->R.rax = bytes_written;
+        }
+        break;
+    }
+
+    case SYS_CREATE:
+    {
+        const char *path = (const char *)f->R.rdi;
+        unsigned sz = (unsigned)f->R.rsi;
+
+        check_address((void *)path);
+
+        // 파일명 기본 검증
+        if (!path || path[0] == '\0')
+        {
+            f->R.rax = false;
+            break;
+        }
+
+        lock_acquire(&filesys_lock);
+        bool result = filesys_create(path, sz);
+        lock_release(&filesys_lock);
+
+        f->R.rax = result;
+        break;
+    }
+    case SYS_OPEN:
+    {
+        const char *path = (const char *)f->R.rdi;
+
+        check_address((void *)path);
+        lock_acquire(&filesys_lock);
+        struct file *file = filesys_open(path);
+        lock_release(&filesys_lock);
+
+        if (file == NULL)
+        {
+            f->R.rax = -1; // 파일 열기 실패
+        }
+        else
+        {
+            int fd = allocate_fd(file);
+            if (fd == -1)
+            {
+                // fd 테이블 가득 참, 파일 닫기
+                file_close(file);
+                f->R.rax = -1;
+            }
+            else
+            {
+                f->R.rax = fd; // 성공적으로 할당된 fd 반환
+            }
+        }
+        break;
+    }
+
+    case SYS_CLOSE:
+    {
+        int fd = (int)f->R.rdi;
+
+        struct file *file = get_file(fd);
+        if (file != NULL)
+        {
+            lock_acquire(&filesys_lock);
+            file_close(file);
+            lock_release(&filesys_lock);
+
+            release_fd(fd);
+        }
+        // close는 반환값 없음
+        break;
+    }
+    case SYS_READ:
+    {
+        int fd = (int)f->R.rdi;
+        void *buffer = (void *)f->R.rsi;
+        unsigned size = (unsigned)f->R.rdx;
+
+        // 버퍼 주소 검증
+        check_buffer(buffer, size);
+
+        if (fd == 0)
+        {
+            // stdin에서 읽기
+            char *buf = (char *)buffer;
+            for (unsigned i = 0; i < size; i++)
+            {
+                buf[i] = input_getc();
+            }
+            f->R.rax = size;
+        }
+        else if (fd == 1)
+        {
+            // stdout에서 읽기 시도 - 에러
+            f->R.rax = -1;
+        }
+        else
+        {
+            // 파일에서 읽기
+            struct file *file = get_file(fd);
+            if (file == NULL)
+            {
+                f->R.rax = -1;
+                break;
+            }
+
+            lock_acquire(&filesys_lock);
+            int bytes_read = file_read(file, buffer, size);
+            lock_release(&filesys_lock);
+
+            f->R.rax = bytes_read;
+        }
+        break;
+    }
+    case SYS_FILESIZE:
+    {
+        int fd = (int)f->R.rdi;
+
+        struct file *file = get_file(fd);
+        if (file == NULL)
+        {
+            f->R.rax = -1;
+            break;
+        }
+
+        lock_acquire(&filesys_lock);
+        off_t size = file_length(file);
+        lock_release(&filesys_lock);
+
+        f->R.rax = size;
+        break;
+    }
+
+    default:
+        printf("Unknown system call: %d\n", (int)nr);
+        printf("%s: exit(-1)\n", thread_current()->name);
+        thread_current()->exit_status = -1;
+        thread_exit();
+        break;
+    }
+}
+
+static void check_address(void *addr)
+{
+    if (addr == NULL || !is_user_vaddr(addr))
+    {
+        printf("%s: exit(-1)\n", thread_current()->name);
+        thread_current()->exit_status = -1;
+        thread_exit();
+    }
+}
+
+static int allocate_fd(struct file *file)
+{
+    struct thread *cur = thread_current();
+
+    // 2번부터 빈 슬롯 찾기 (0=stdin, 1=stdout 예약)
+    for (int fd = 2; fd < FD_MAX; fd++)
+    {
+        if (cur->fd_table[fd] == NULL)
+        {
+            cur->fd_table[fd] = file;
+            return fd;
+        }
+    }
+    return -1; // 테이블 가득 참
+}
+
+static struct file *get_file(int fd)
+{
+    struct thread *cur = thread_current();
+    if (fd < 0 || fd >= FD_MAX)
+    {
+        return NULL;
+    }
+
+    return cur->fd_table[fd];
+}
+
+static void release_fd(int fd)
+{
+    struct thread *cur = thread_current();
+
+    if (fd >= 2 && fd < FD_MAX)
+    { // stdin/stdout는 해제 불가
+        cur->fd_table[fd] = NULL;
+    }
+}
+static void check_buffer(void *buffer, unsigned size)
+{
+    if (buffer == NULL || !is_user_vaddr(buffer))
+    {
+        printf("%s: exit(-1)\n", thread_current()->name);
+        thread_current()->exit_status = -1;
+        thread_exit();
+    }
+
+    // 버퍼 전체 영역이 사용자 공간인지 확인
+    char *end = (char *)buffer + size - 1;
+    if (!is_user_vaddr(end))
+    {
+        printf("%s: exit(-1)\n", thread_current()->name);
+        thread_current()->exit_status = -1;
+        thread_exit();
+    }
 }

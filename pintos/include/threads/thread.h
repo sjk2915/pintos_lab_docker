@@ -85,6 +85,9 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
+
+
+#define FD_MAX 128
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
@@ -94,10 +97,14 @@ struct thread {
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	int exit_status;   
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+
+    struct file *fd_table[FD_MAX];  // 정적 배열로 변경
+    int next_fd;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

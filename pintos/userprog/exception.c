@@ -118,43 +118,37 @@ kill (struct intr_frame *f) {
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
 page_fault (struct intr_frame *f) {
-	bool not_present;  /* True: not-present page, false: writing r/o page. */
-	bool write;        /* True: access was write, false: access was read. */
-	bool user;         /* True: access by user, false: access by kernel. */
-	void *fault_addr;  /* Fault address. */
-
-	/* Obtain faulting address, the virtual address that was
-	   accessed to cause the fault.  It may point to code or to
-	   data.  It is not necessarily the address of the instruction
-	   that caused the fault (that's f->rip). */
+	bool not_present;
+	bool write;
+	bool user;
+	void *fault_addr;
 
 	fault_addr = (void *) rcr2();
-
-	/* Turn interrupts back on (they were only off so that we could
-	   be assured of reading CR2 before it changed). */
 	intr_enable ();
 
-
-	/* Determine cause. */
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
 #ifdef VM
-	/* For project 3 and later. */
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
 #endif
 
-	/* Count page faults. */
 	page_fault_cnt++;
 
-	/* If the fault is true fault, show info and exit. */
-	printf ("Page fault at %p: %s error %s page in %s context.\n",
-			fault_addr,
-			not_present ? "not present" : "rights violation",
-			write ? "writing" : "reading",
-			user ? "user" : "kernel");
-	kill (f);
+	/* 사용자 관련 page fault면 조용히 프로세스 종료 */
+	if (user || is_user_vaddr(fault_addr)) {
+		printf("%s: exit(-1)\n", thread_current()->name);
+		thread_current()->exit_status = -1;
+		thread_exit();
+	} else {
+		/* 커널 오류인 경우만 메시지 출력 */
+		printf ("Page fault at %p: %s error %s page in %s context.\n",
+				fault_addr,
+				not_present ? "not present" : "rights violation",
+				write ? "writing" : "reading",
+				user ? "user" : "kernel");
+		kill (f);
+	}
 }
-
