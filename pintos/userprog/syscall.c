@@ -244,7 +244,39 @@ void syscall_handler(struct intr_frame *f)
         f->R.rax = size;
         break;
     }
+        // syscall_handler 함수의 switch문에 추가:
 
+    case SYS_FORK:
+    {
+        const char *thread_name = (const char *)f->R.rdi;
+        check_address((void *)thread_name);
+        f->R.rax = process_fork(thread_name, f);
+        break;
+    }
+
+    case SYS_EXEC:
+    {
+        const char *cmd_line = (const char *)f->R.rdi;
+        check_address((void *)cmd_line);
+
+        char *cmd_copy = palloc_get_page(0);
+        if (cmd_copy == NULL)
+        {
+            f->R.rax = -1;
+            break;
+        }
+        strlcpy(cmd_copy, cmd_line, PGSIZE);
+
+        f->R.rax = process_exec(cmd_copy);
+        break;
+    }
+
+    case SYS_WAIT:
+    {
+        tid_t pid = (tid_t)f->R.rdi;
+        f->R.rax = process_wait(pid);
+        break;
+    }
     default:
         printf("Unknown system call: %d\n", (int)nr);
         printf("%s: exit(-1)\n", thread_current()->name);
@@ -268,36 +300,46 @@ static int allocate_fd(struct file *file)
 {
     struct thread *cur = thread_current();
 
-    // 2번부터 빈 슬롯 찾기 (0=stdin, 1=stdout 예약)
-    for (int fd = 2; fd < FD_MAX; fd++)
+    // 3번부터 빈 슬롯 찾기 (0=stdin, 1=stdout, 2=stderr 예약)
+    for (int fd = 3; fd < cur->fd_idx && fd < FDCOUNT_LIMIT; fd++)
     {
-        if (cur->fd_table[fd] == NULL)
+        if (cur->fdt[fd] == NULL)
         {
-            cur->fd_table[fd] = file;
+            cur->fdt[fd] = file;
+            if (fd >= cur->fd_idx)
+                cur->fd_idx = fd + 1;
             return fd;
         }
     }
+
+    // 새 슬롯 할당
+    if (cur->fd_idx < FDCOUNT_LIMIT)
+    {
+        cur->fdt[cur->fd_idx] = file;
+        return cur->fd_idx++;
+    }
+
     return -1; // 테이블 가득 참
 }
 
 static struct file *get_file(int fd)
 {
     struct thread *cur = thread_current();
-    if (fd < 0 || fd >= FD_MAX)
+    if (fd < 0 || fd >= FDCOUNT_LIMIT || fd >= cur->fd_idx)
     {
         return NULL;
     }
 
-    return cur->fd_table[fd];
+    return cur->fdt[fd];
 }
 
 static void release_fd(int fd)
 {
     struct thread *cur = thread_current();
 
-    if (fd >= 2 && fd < FD_MAX)
-    { // stdin/stdout는 해제 불가
-        cur->fd_table[fd] = NULL;
+    if (fd >= 3 && fd < FDCOUNT_LIMIT && fd < cur->fd_idx)
+    {
+        cur->fdt[fd] = NULL;
     }
 }
 static void check_buffer(void *buffer, unsigned size)
