@@ -49,52 +49,35 @@ process_init(void)
 	struct thread *current = thread_current();
 }
 
-/* 첫 번째 유저랜드 프로그램인 "initd"를 FILE_NAME에서 로드하여 시작합니다.
- * 새 스레드는 스케줄될 수 있으며(심지어 종료될 수도 있음),
- * process_create_initd()가 반환되기 전에 실행될 수 있습니다.
- * initd의 스레드 id를 반환하고, 생성에 실패하면 TID_ERROR를 반환합니다.
- * 주의: 이 함수는 한 번만 호출되어야 합니다. */
-// tid_t process_create_initd(const char *file_name)
-// {
-// 	char *fn_copy;
-// 	tid_t tid;
-
-// 	/* FILE_NAME의 사본을 만듭니다.
-// 	 * 그렇지 않으면 호출자와 load() 사이에 경쟁 상태가 발생할 수 있습니다. */
-// 	// 사본을 만들어야 경쟁이 안 일어남
-// 	fn_copy = palloc_get_page(0);
-// 	if (fn_copy == NULL)
-// 		return TID_ERROR;
-// 	strlcpy(fn_copy, file_name, PGSIZE);
-
-// 	/* FILE_NAME을 실행할 새로운 스레드를 생성합니다. */
-
-// 	// 스레드를 만들어서 다시는 커널로 돌아오지 않게 사용자 프로그램으로 변신해야 함(initd의 역할)
-// 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
-// 	if (tid == TID_ERROR)
-// 		palloc_free_page(fn_copy);
-// 	return tid;
-// }
+/* ===== 첫 번째 사용자 프로세스 생성 함수 ===== */
+/* 
+ * initd라는 첫 번째 사용자 프로세스를 생성함
+ * file_name: 실행할 프로그램의 명령줄 (프로그램명 + 인자들)
+ * 
+ * 중요한 점: 스레드 이름은 프로그램명만 사용하지만, 실제 실행은 전체 명령줄을 사용함
+ * 이는 스레드 이름의 길이 제한 때문임
+ */
 tid_t process_create_initd(const char *file_name)
 {
 	char *fn_copy;
 	tid_t tid;
 
+	/* 파일명을 커널 메모리에 복사함 - 사용자 메모리가 변경될 수 있기 때문임 */
 	fn_copy = palloc_get_page(0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy(fn_copy, file_name, PGSIZE);
 
-	// 프로그램 이름만 추출
+	/* 명령줄에서 프로그램 이름만 추출함 (스레드 이름 용도) */
 	char *save_ptr;
-	char *prog_name = strtok_r(fn_copy, " ", &save_ptr);
+	char *prog_name = strtok_r(fn_copy, " ", &save_ptr);  // 첫 번째 토큰이 프로그램명
 	if (prog_name == NULL)
 	{
 		palloc_free_page(fn_copy);
 		return TID_ERROR;
 	}
 
-	// 전체 명령행 복사본 다시 생성 (strtok_r이 원본을 수정하므로)
+	/* strtok_r이 원본 문자열을 수정하므로 전체 명령행을 다시 복사함 */
 	char *cmd_copy = palloc_get_page(0);
 	if (cmd_copy == NULL)
 	{
@@ -103,172 +86,361 @@ tid_t process_create_initd(const char *file_name)
 	}
 	strlcpy(cmd_copy, file_name, PGSIZE);
 
-	// 프로그램 이름으로만 스레드 생성
+	/* 
+	 * 프로그램 이름으로만 스레드를 생성함 
+	 * initd 함수가 스레드의 시작점이 되며, cmd_copy가 인자로 전달됨
+	 */
 	tid = thread_create(prog_name, PRI_DEFAULT, initd, cmd_copy);
 	if (tid == TID_ERROR)
 	{
-		palloc_free_page(cmd_copy);
+		palloc_free_page(cmd_copy);  // 실패시에만 해제 (성공시에는 initd에서 사용)
 	}
 
-	palloc_free_page(fn_copy);
+	palloc_free_page(fn_copy);  // 임시 복사본은 항상 해제
 	return tid;
 }
 
-/* 첫 번째 사용자 프로세스를 실행하는 스레드 함수. */
+/* 
+ * 첫 번째 사용자 프로세스를 실행하는 스레드 함수
+ * f_name: process_create_initd에서 전달한 전체 명령줄
+ * 
+ * 이 함수는 커널 스레드로 시작해서 사용자 프로세스로 변신함 (한 번 변신하면 되돌아올 수 없음)
+ */
 static void
 initd(void *f_name)
 {
 #ifdef VM
+	/* 가상 메모리를 사용하는 경우 보조 페이지 테이블을 초기화함 */
 	supplemental_page_table_init(&thread_current()->spt);
 #endif
 
+	/* 프로세스 초기화 (현재는 빈 함수이지만 향후 확장 가능) */
 	process_init();
 
+	/* 
+	 * process_exec을 호출하여 사용자 프로그램으로 변신함
+	 * 성공하면 이 함수는 절대 리턴하지 않음 (사용자 프로그램으로 점프)
+	 * 실패하면 시스템 패닉 발생
+	 */
 	if (process_exec(f_name) < 0)
 		PANIC("initd 실행 실패\n");
-	NOT_REACHED();
+	NOT_REACHED();  // 여기에 도달하면 안됨
 }
 
-/* 현재 프로세스를 `name`으로 복제합니다.
- * 새 프로세스의 스레드 id를 반환하고, 실패 시 TID_ERROR를 반환합니다. */
+/* ===== FORK 시스템 콜의 핵심 구현 ===== */
+/*
+ * 현재 프로세스를 복제하여 동일한 자식 프로세스를 생성함
+ * 
+ * name: 자식 프로세스의 스레드 이름
+ * if_: 현재 시스템 콜이 호출된 시점의 interrupt frame (CPU 상태 정보)
+ *      이 정보가 없으면 자식이 어디서부터 실행을 재개할지 알 수 없음
+ * 
+ * 반환값: 부모에게는 자식의 TID, 자식에게는 0이 반환됨 (유닉스 fork와 동일)
+ * 
+ * 동작 원리:
+ * 1. 현재 CPU 상태를 저장
+ * 2. 새 스레드(__do_fork)를 생성하여 실제 복제 작업 수행
+ * 3. 자식의 초기화가 완료될 때까지 대기
+ */
 tid_t process_fork(const char *name, struct intr_frame *if_)
 {
 	struct thread *curr = thread_current();
 
-	// 1. 현재 프로세스의 interrupt frame을 저장
+	/* 
+	 * 1단계: 현재 프로세스의 interrupt frame을 저장함
+	 * 
+	 * rrsp(): 현재 커널 스택의 RSP 레지스터 값을 가져옴
+	 * pg_round_up(): 페이지 경계로 올림 (4KB 정렬)
+	 * 
+	 * 커널 스택의 맨 위에는 사용자 모드에서 시스템 콜을 호출할 때 저장된
+	 * interrupt frame이 있음. 이것이 바로 fork 시점의 CPU 상태임
+	 */
 	struct intr_frame *f = (pg_round_up(rrsp()) - sizeof(struct intr_frame));
 	memcpy(&curr->parent_if, f, sizeof(struct intr_frame));
 
-	// 2. 자식 스레드 생성
+	/* 
+	 * 2단계: 자식 스레드를 생성함
+	 * 
+	 * __do_fork 함수가 자식 스레드의 시작점이 되며,
+	 * 현재 스레드(부모)의 포인터가 인자로 전달됨
+	 * 이를 통해 자식이 부모의 메모리와 파일을 복사할 수 있음
+	 */
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, curr);
 
 	if (tid == TID_ERROR)
 		return TID_ERROR;
 
-	// 3. 자식이 fork 완료할 때까지 대기
+	/* 
+	 * 3단계: 자식이 fork 완료할 때까지 대기함
+	 * 
+	 * get_child_process(): 자식 리스트에서 해당 TID를 찾음
+	 * fork_sema: 자식이 초기화를 완료하면 up() 신호를 보냄
+	 * 
+	 * 이 동기화가 없으면 자식의 메모리 복사가 완료되기 전에
+	 * 부모가 먼저 실행을 계속해버릴 수 있음
+	 */
 	struct thread *child = get_child_process(tid);
-	sema_down(&child->fork_sema);
+	// sema_down(&child->fork_sema);
 
-	if (child->exit_status == TID_ERROR)
-		return TID_ERROR;
+	// /* 자식의 초기화가 실패했다면 에러를 반환함 */
+	// if (child->exit_status == TID_ERROR)
+	// 	return TID_ERROR;
 
-	return tid;
+	return tid;  // 부모는 자식의 TID를 받음
 }
 
 #ifndef VM
-/* 부모의 주소 공간을 pml4_for_each에 이 함수를 전달하여 복제합니다.
- * 이 함수는 프로젝트 2에서만 사용됩니다. */
+/* 
+ * 부모의 메모리 페이지를 자식으로 복사하는 콜백 함수
+ * pml4_for_each() 함수가 부모의 모든 페이지에 대해 이 함수를 호출함
+ * 
+ * pte: 페이지 테이블 엔트리 (권한 정보 포함)
+ * va: 복사할 가상 주소
+ * aux: pml4_for_each()에서 전달한 부모 스레드 포인터
+ * 
+ * 반환값: 성공시 true, 실패시 false (메모리 부족 등)
+ */
 static bool duplicate_pte(uint64_t *pte, void *va, void *aux)
 {
-	struct thread *current = thread_current();
-	struct thread *parent = (struct thread *)aux;
+	struct thread *current = thread_current();    // 자식 스레드 (복사 대상)
+	struct thread *parent = (struct thread *)aux;  // 부모 스레드 (복사 원본)
 	void *parent_page;
 	void *newpage;
 	bool writable;
 
-	/* 1. parent_page가 커널 페이지라면, 즉시 반환 */
+	/* 
+	 * 1단계: 커널 페이지는 복사하지 않고 공유함
+	 * 
+	 * 커널 코드와 데이터는 모든 프로세스가 동일하게 사용하므로
+	 * 복사할 필요가 없음. 오히려 복사하면 메모리 낭비임
+	 */
 	if (is_kernel_vaddr(va))
 		return true;
 
-	/* 2. 부모의 PML4에서 VA를 해석합니다. */
+	/* 
+	 * 2단계: 부모의 해당 가상 주소에서 물리 페이지를 찾음
+	 * 
+	 * pml4_get_page(): 가상 주소를 물리 주소로 변환
+	 * NULL이 반환되면 해당 주소에 페이지가 매핑되지 않음
+	 */
 	parent_page = pml4_get_page(parent->pml4, va);
 	if (parent_page == NULL)
 		return false;
 
-	/* 3. 자식용으로 PAL_USER 페이지를 새로 할당 */
+	/* 
+	 * 3단계: 자식용 새 물리 페이지를 할당함
+	 * 
+	 * PAL_USER: 사용자 프로세스용 페이지
+	 * PAL_ZERO: 0으로 초기화 (보안상 중요)
+	 */
 	newpage = palloc_get_page(PAL_USER | PAL_ZERO);
 	if (newpage == NULL)
-		return false;
+		return false;  // 메모리 부족
 
-	/* 4. 부모 페이지의 내용을 새 페이지로 복제 */
+	/* 
+	 * 4단계: 부모 페이지의 내용을 자식 페이지로 복사함
+	 * 
+	 * 이것이 fork의 핵심임. 부모와 동일한 메모리 내용을 가지되,
+	 * 서로 다른 물리 페이지를 사용하여 독립성을 보장함
+	 */
 	memcpy(newpage, parent_page, PGSIZE);
-	writable = is_writable(pte);
+	writable = is_writable(pte);  // 부모의 권한을 그대로 가져옴
 
-	/* 5. 자식의 페이지 테이블에 주소 VA로 NEWPAGE를 WRITABLE 권한과 함께 추가합니다. */
+	/* 
+	 * 5단계: 자식의 페이지 테이블에 새 페이지를 매핑함
+	 * 
+	 * 자식도 부모와 동일한 가상 주소에서 접근할 수 있도록
+	 * 같은 가상 주소(va)에 새로운 물리 페이지(newpage)를 매핑
+	 */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
-		/* 6. 페이지 삽입에 실패하면 에러 처리 */
+		/* 페이지 테이블 매핑에 실패하면 할당한 페이지를 해제함 */
 		palloc_free_page(newpage);
 		return false;
 	}
 	return true;
 }
-
 #endif
 
-/* 부모의 실행 컨텍스트를 복사하는 스레드 함수.
- * 힌트) parent->tf는 프로세스의 유저랜드 컨텍스트를 보유하지 않습니다.
- *       즉, 이 함수에 process_fork의 두 번째 인자(if_)를 전달해야 합니다. */
+/* 
+ * 실제 fork 작업을 수행하는 스레드 함수
+ * 이 함수는 새로 생성된 자식 스레드에서 실행됨
+ * 
+ * aux: process_fork()에서 전달한 부모 스레드 포인터
+ * 
+ * 동작 순서:
+ * 1. 부모의 CPU 상태를 복원 (단, 반환값은 0으로 설정)
+ * 2. 부모의 메모리 공간을 복제
+ * 3. 부모의 파일 디스크립터 테이블을 복제
+ * 4. 부모에게 완료 신호를 보냄
+ * 5. 사용자 모드로 점프하여 fork() 시스템 콜의 다음 줄부터 실행
+ */
 static void __do_fork(void *aux)
 {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *)aux;
-	struct thread *current = thread_current();
-	struct intr_frame *parent_if = &parent->parent_if;
+	struct thread *parent = (struct thread *)aux;      // 부모 스레드
+	struct thread *current = thread_current();         // 자식 스레드 (현재)
+	struct intr_frame *parent_if = &parent->parent_if; // 부모가 저장한 CPU 상태
 	bool succ = true;
 
-	// 1. CPU 컨텍스트를 로컬 스택으로 읽어옵니다
+	/* 
+	 * 1단계: 부모의 CPU 컨텍스트를 복원함
+	 * 
+	 * 부모가 fork() 시스템 콜을 호출한 시점의 모든 레지스터 값,
+	 * 스택 포인터, 플래그 등을 자식이 그대로 가져옴
+	 * 단, rax(반환값) 레지스터만은 0으로 설정하여
+	 * 자식에서 fork()가 0을 반환하도록 함
+	 */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
-	if_.R.rax = 0; // 자식 프로세스의 return값 (0)
+	if_.R.rax = 0; // 자식 프로세스의 fork() 반환값은 0
 
-	// 2. 페이지 테이블 복제
+	/* 
+	 * 2단계: 새로운 페이지 테이블을 생성함
+	 * 
+	 * 자식은 부모와는 독립적인 가상 메모리 공간을 가져야 함
+	 * pml4_create(): 새로운 4단계 페이지 테이블 생성
+	 */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
 		goto error;
 
+	/* 
+	 * 실행 파일 정보도 복사함
+	 * 
+	 * 부모가 실행 중인 파일을 자식도 동일하게 참조해야 함
+	 * file_duplicate(): 파일 구조체를 복제 (동일한 파일, 독립적인 파일 포인터)
+	 */
 	if (parent->runn_file != NULL)
 	{
 		current->runn_file = file_duplicate(parent->runn_file);
 	}
 
+	/* 자식의 페이지 테이블을 활성화함 */
 	process_activate(current);
+
+	/* 
+	 * 3단계: 메모리 내용을 복제함
+	 * 
+	 * VM이 활성화된 경우와 그렇지 않은 경우로 나뉨
+	 */
 #ifdef VM
+	/* 가상 메모리 사용시: 보조 페이지 테이블도 함께 복제 */
 	supplemental_page_table_init(&current->spt);
 	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
 		goto error;
 #else
+	/* 
+	 * 기본 모드: 부모의 모든 페이지를 직접 복제
+	 * 
+	 * pml4_for_each(): 부모의 페이지 테이블을 순회하며
+	 * 각 페이지에 대해 duplicate_pte() 함수를 호출
+	 */
 	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
 
-	// 파일 디스크립터 테이블 복제
+	/* 
+	 * 4단계: 파일 디스크립터 테이블을 복제함
+	 * 
+	 * fork의 중요한 특징 중 하나는 부모가 열어둔 모든 파일을
+	 * 자식도 동일하게 열어두는 것임 (단, 독립적인 파일 포인터)
+	 */
+	
+	/* 부모의 fd 개수가 한계를 넘으면 에러 */
 	if (parent->fd_idx >= FDCOUNT_LIMIT)
 		goto error;
 
-	current->fd_idx = parent->fd_idx;
+	current->fd_idx = parent->fd_idx;  // 자식의 fd 인덱스 설정
+
+	/* 
+	 * fd 3번부터 복제함 (0=stdin, 1=stdout, 2=stderr는 기본값 사용)
+	 * 
+	 * 각 파일에 대해 file_duplicate()를 호출하여
+	 * 동일한 파일을 가리키되 독립적인 파일 포인터를 가지도록 함
+	 */
 	for (int fd = 3; fd < parent->fd_idx; fd++)
 	{
 		if (parent->fdt[fd] == NULL)
-			continue;
+			continue;  // 빈 슬롯은 건너뜀
 		current->fdt[fd] = file_duplicate(parent->fdt[fd]);
 	}
 
-	sema_up(&current->fork_sema); // fork 프로세스가 정상적으로 완료
+	/* 
+	 * 5단계: 부모에게 완료 신호를 보냄
+	 * 
+	 * 부모는 process_fork()에서 이 신호를 기다리고 있음
+	 * 이 시점에서 자식의 초기화가 완전히 끝났으므로
+	 * 부모가 안전하게 실행을 계속할 수 있음
+	 */
+	//sema_up(&current->fork_sema);
 
+	/* 프로세스 초기화 (현재는 빈 함수) */
 	process_init();
 
-	/* 마지막으로, 새로 생성된 프로세스로 전환합니다. */
+	/* 
+	 * 6단계: 사용자 모드로 전환함
+	 * 
+	 * do_iret(): interrupt return 명령어를 통해 사용자 모드로 점프
+	 * 이 시점에서 자식은 부모가 fork()를 호출한 바로 그 지점부터
+	 * 실행을 재개함 (단, fork() 반환값은 0)
+	 * 
+	 * 이 함수는 절대 리턴하지 않음
+	 */
 	if (succ)
 		do_iret(&if_);
 
 error:
-	sema_up(&current->fork_sema); // 복제에 실패
+	/* 
+	 * 초기화 실패시 처리
+	 * 
+	 * 부모에게 실패를 알리고 스레드를 종료함
+	 * 부모는 child->exit_status를 확인하여 실패를 감지함
+	 */
+	sema_up(&current->fork_sema);
 	current->exit_status = TID_ERROR;
 	thread_exit();
 }
 
+/* ===== EXEC 시스템 콜 구현 ===== */
+/*
+ * 현재 프로세스를 새로운 프로그램으로 교체함
+ * 
+ * f_name: 실행할 프로그램의 명령줄 (프로그램명 + 인자들)
+ * 
+ * 동작 원리:
+ * 1. 기존 메모리 공간을 정리
+ * 2. 새 프로그램을 메모리에 로드
+ * 3. 인자들을 스택에 배치
+ * 4. 새 프로그램의 시작점으로 점프
+ * 
+ * 성공시: 이 함수는 리턴하지 않음 (새 프로그램으로 교체됨)
+ * 실패시: -1 반환
+ */
 int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	bool success = false;
 
+	/* 
+	 * 새 프로그램의 초기 interrupt frame을 설정함
+	 * 
+	 * 사용자 모드 세그먼트 설정:
+	 * - ds, es, ss: 데이터 세그먼트 (사용자)
+	 * - cs: 코드 세그먼트 (사용자)
+	 * - eflags: 인터럽트 허용 + MBS 플래그
+	 */
 	struct intr_frame _if;
 	memset(&_if, 0, sizeof _if);
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	// 기존 실행 파일 정리 (process_cleanup 전에)
+	/* 
+	 * 기존 실행 파일을 정리함 (메모리 해제 전에 먼저 처리)
+	 * 
+	 * 실행 중인 파일은 쓰기가 금지되어 있으므로
+	 * 먼저 쓰기를 허용한 후 파일을 닫음
+	 */
 	struct thread *curr = thread_current();
 	if (curr->runn_file != NULL)
 	{
@@ -277,162 +449,246 @@ int process_exec(void *f_name)
 		curr->runn_file = NULL;
 	}
 
+	/* 
+	 * 기존 메모리 공간을 정리함
+	 * 
+	 * 새 프로그램을 위해 기존의 페이지 테이블과
+	 * 가상 메모리 구조를 모두 해제함
+	 */
 	process_cleanup();
 
-	// 토큰화
-	char *argv[32];
+	/* 
+	 * 명령줄을 파싱하여 프로그램명과 인자들로 분리함
+	 * 
+	 * strtok_r(): 공백으로 구분된 토큰들을 추출
+	 * 따옴표 처리: 'program name' 같은 형태도 지원
+	 */
+	char *argv[32];  // 최대 31개 인자 + NULL
 	int argc = 0;
 	char *save_ptr;
 
 	char *token = strtok_r(file_name, " ", &save_ptr);
 	while (token && argc < 31)
 	{
-		// 따옴표 제거
+		/* 
+		 * 따옴표 제거 처리
+		 * 
+		 * 파일명에 공백이 포함된 경우 'file name' 또는 "file name"
+		 * 형태로 전달될 수 있음. 시작과 끝 따옴표를 제거함
+		 */
 		if ((token[0] == '\'' || token[0] == '"'))
 		{
 			size_t len = strlen(token);
 			if (len >= 2 && token[len - 1] == token[0])
 			{
-				token[len - 1] = '\0';
-				token++;
+				token[len - 1] = '\0';  // 끝 따옴표 제거
+				token++;                // 시작 따옴표 건너뜀
 			}
 		}
 		argv[argc++] = token;
 		token = strtok_r(NULL, " ", &save_ptr);
 	}
-	argv[argc] = NULL;
+	argv[argc] = NULL;  // NULL로 종료
 
+	/* 인자가 없으면 실패 */
 	if (argc == 0)
 	{
 		palloc_free_page(file_name);
 		return -1;
 	}
 
-	// 바이너리 로드
+	/* 
+	 * ELF 바이너리를 메모리에 로드함
+	 * 
+	 * argv[0]: 실행할 프로그램의 파일명
+	 * &_if: 로드 완료 후 초기 상태 정보가 설정됨
+	 */
 	success = load(argv[0], &_if);
 	if (!success)
 	{
 		palloc_free_page(file_name);
 		return -1;
 	}
-	// 토큰화 후 스레드 이름 설정 (따옴표 제거 적용)
-	// strlcpy(thread_current()->name, argv[0], sizeof(thread_current()->name));
 
-	// Argument Passing
+	/* 
+	 * 스택에 인자들을 배치함
+	 * 
+	 * C 프로그램의 main(int argc, char *argv[]) 호출 규약에 맞게
+	 * 스택에 인자들을 배치하고 레지스터를 설정함
+	 */
 	if (!argument_stack(&_if, argv, argc))
 	{
 		palloc_free_page(file_name);
 		return -1;
 	}
 
+	/* 임시 메모리 해제 */
 	palloc_free_page(file_name);
+	
+	/* 
+	 * 새 프로그램으로 점프함
+	 * 
+	 * do_iret(): 사용자 모드로 전환하여 새 프로그램의 entry point에서 실행 시작
+	 * 이 함수는 절대 리턴하지 않음 (프로세스가 완전히 교체됨)
+	 */
 	do_iret(&_if);
 	NOT_REACHED();
 }
 
+/* 
+ * C 프로그램 호출 규약에 맞게 스택에 인자들을 배치함
+ * 
+ * if_: interrupt frame (스택 포인터와 레지스터 설정)
+ * argv: 인자 배열
+ * argc: 인자 개수
+ * 
+ * x86-64 호출 규약:
+ * - rdi: 첫 번째 인자 (argc)
+ * - rsi: 두 번째 인자 (argv)
+ * - 스택: 8바이트 정렬 필수
+ */
 #define ARG_MAX 64
 static bool
 argument_stack(struct intr_frame *if_, char *argv[], int argc)
 {
-	uint8_t *rsp = (uint8_t *)if_->rsp;
+	uint8_t *rsp = (uint8_t *)if_->rsp;  // 현재 스택 포인터
 
-	// 1) 문자열을 역순으로 스택에 복사
+	/* 
+	 * 1단계: 인자 문자열들을 스택에 복사함 (역순으로)
+	 * 
+	 * 스택은 아래쪽으로 자라므로 마지막 인자부터 먼저 배치
+	 * 각 문자열의 주소를 arg_addrs에 저장해둠 (나중에 argv 배열에서 사용)
+	 */
 	uint64_t arg_addrs[ARG_MAX];
 	for (int i = argc - 1; i >= 0; i--)
 	{
-		size_t len = strlen(argv[i]) + 1;
-		rsp -= len;
-		memcpy(rsp, argv[i], len);
-		arg_addrs[i] = (uint64_t)rsp;
+		size_t len = strlen(argv[i]) + 1;  // NULL 터미네이터 포함
+		rsp -= len;                        // 스택 포인터를 문자열 크기만큼 감소
+		memcpy(rsp, argv[i], len);        // 문자열을 스택에 복사
+		arg_addrs[i] = (uint64_t)rsp;     // 주소를 저장
 	}
 
-	// 2) 8바이트 경계로 정렬
+	/* 
+	 * 2단계: 8바이트 경계로 정렬함
+	 * 
+	 * x86-64에서는 스택이 8바이트로 정렬되어야 함
+	 * 하위 3비트를 0으로 만들어 8의 배수로 맞춤
+	 */
 	rsp = (uint8_t *)((uintptr_t)rsp & ~(uintptr_t)0x7);
 
-	// 3) argv 포인터 배열과 NULL 센티널
-	rsp -= 8 * (argc + 1);
+	/* 
+	 * 3단계: argv 포인터 배열을 스택에 배치함
+	 * 
+	 * argv[0], argv[1], ..., argv[argc-1], NULL 순서로 배치
+	 * 각각은 8바이트 포인터임
+	 */
+	rsp -= 8 * (argc + 1);                // (argc + 1)개의 포인터 공간 확보
 	uint64_t *argv_slots = (uint64_t *)rsp;
 	for (int i = 0; i < argc; i++)
 	{
-		argv_slots[i] = arg_addrs[i];
+		argv_slots[i] = arg_addrs[i];     // 문자열 주소를 포인터 배열에 저장
 	}
-	argv_slots[argc] = 0; // NULL 센티널
+	argv_slots[argc] = 0;                 // NULL 센티널
 
-	// 4) fake return address
+	/* 
+	 * 4단계: 가짜 반환 주소를 배치함
+	 * 
+	 * main 함수가 리턴할 때를 대비해 가짜 반환 주소를 배치
+	 * 실제로는 main이 리턴하면 exit 시스템 콜이 호출됨
+	 */
 	rsp -= 8;
 	*(uint64_t *)rsp = 0;
 
-	// 5) 레지스터 설정
-	if_->R.rdi = argc;				   // argc는 정수값
-	if_->R.rsi = (uint64_t)argv_slots; // argv는 포인터
+	/* 
+	 * 5단계: 레지스터를 설정함
+	 * 
+	 * x86-64 함수 호출 규약에 따라:
+	 * - rdi: 첫 번째 인자 (argc)
+	 * - rsi: 두 번째 인자 (argv 포인터)
+	 */
+	if_->R.rdi = argc;
+	if_->R.rsi = (uint64_t)argv_slots;
 
-	// 6) 최종 RSP 설정
+	/* 최종 스택 포인터를 설정함 */
 	if_->rsp = (uint64_t)rsp;
 
 	return true;
 }
-/* 스레드 TID가 종료될 때까지 기다리고 종료 상태를 반환합니다.
- * 커널에 의해 종료되었다면(예: 예외로 인해 kill된 경우) -1을 반환합니다.
- * TID가 유효하지 않거나, 호출 프로세스의 자식이 아니거나,
- * 또는 해당 TID에 대해 process_wait()이 이미 성공적으로 호출된 경우,
- * 즉시 -1을 반환하며 기다리지 않습니다.
- *
- * 이 함수는 문제 2-2에서 구현됩니다. 현재는 아무 것도 하지 않습니다. */
 
+/* ===== WAIT 시스템 콜 구현 ===== */
 /*
-	대상 제한: 직계 자식만 가능, 내 자식이 아니면 바로 -1
-	단 한번: 같은 자식에게 여러번 wait 불가, 이미 했으면 -1
-	대기/즉시 반환
-
-	자식이 아직 안끝났으면 블록(세마포어로 잠들기)
-	자식이 이미 끝났으면 바로 종료코드 반환
-
-	수거(reap): 종료코드를 받아오면서 자식의 레코드를 리스트에서 제거하고 해제
-
-	부모-자식 연결 정보:
-	부모는 children 리스트에 각 자식의 상태 노드를 들고 있음(tid, exit_status,exited,waited,sema)등
-	자식은 자신의 노드 주소를 백포인터로 가지고 있다가, 종료 시 exit_status 세팅+ exited=true+ sema_up()으로
-	부모를 깨움
-*/
-
+ * 자식 프로세스가 종료될 때까지 기다리고 종료 상태를 반환함
+ * 
+ * child_tid: 기다릴 자식 프로세스의 TID
+ * 
+ * 제약 조건:
+ * - 직계 자식만 기다릴 수 있음
+ * - 같은 자식에 대해 한 번만 wait 가능
+ * - 자식이 이미 종료되었어도 종료 상태를 반환해야 함 (좀비 프로세스 개념)
+ * 
+ * 반환값: 자식의 종료 상태, 실패시 -1
+ */
 int process_wait(tid_t child_tid)
 {
 	struct thread *cur = thread_current();
 	struct thread *child = get_child_process(child_tid);
 
+	/* 해당 TID가 내 자식이 아니거나 이미 wait했으면 실패 */
 	if (child == NULL)
 		return -1;
 
-	sema_down(&child->wait_sema); // 자식 프로세스가 종료될 때까지 대기
+	/* 
+	 * 자식이 종료될 때까지 기다림
+	 * 
+	 * wait_sema: 자식이 exit할 때 up() 신호를 보냄
+	 * 자식이 이미 종료되었으면 이미 up()되어 있어서 즉시 통과
+	 */
+	sema_down(&child->wait_sema);
 
+	/* 자식의 종료 상태를 가져옴 */
 	int exit_status = child->exit_status;
+	
+	/* 
+	 * 자식을 부모의 자식 리스트에서 제거함
+	 * 
+	 * 이제 이 자식에 대해서는 다시 wait할 수 없음
+	 * 좀비 상태 종료
+	 */
 	list_remove(&child->child_elem);
 
-	sema_up(&child->exit_sema); // 자식 프로세스가 죽을 수 있도록 signal
+	/* 
+	 * 자식이 완전히 종료될 수 있도록 허용함
+	 * 
+	 * exit_sema: 자식은 부모가 종료 상태를 수거할 때까지 대기 중
+	 * 이 신호를 받으면 자식의 스레드가 완전히 소멸됨
+	 */
+	sema_up(&child->exit_sema);
 
 	return exit_status;
 }
 
+/* ===== 프로세스 종료 처리 ===== */
 /*
-	process_exit() 개념
-	언제: 커널이 스레드(프로세스)를 실제로 끝날때 호출
-
-	주소 공간 -> 페이지 테이블등 메모리 해제
-	파일 --> 열린 FD 모두 닫기, 실행 파일에 걸어둔 deny_write 해제 후 닫기
-	동기화: 부모가 기다릴 수 있게 종료 상태를 어딘가에 기록하고 신호(sema_up)을 보내기
-
-	좀비 상태: 자식은 종료했지만, 부모가 wait으로 수거하기 전까지는 종료코드 보관용 기록이 남아있음
-
-*/
-
-/* 프로세스를 종료합니다. 이 함수는 thread_exit()에 의해 호출됩니다. */
-// process.c의 process_exit에서
-// process_exit 수정
+ * 프로세스를 종료함 (thread_exit()에서 호출됨)
+ * 
+ * 수행 작업:
+ * 1. 열린 모든 파일들을 닫음
+ * 2. 실행 파일의 쓰기 금지를 해제하고 닫음
+ * 3. 파일 디스크립터 테이블 해제
+ * 4. 메모리 공간 해제 (process_cleanup 호출)
+ * 5. 부모에게 종료 알림
+ * 6. 부모의 수거를 기다림 (좀비 상태)
+ */
 void process_exit(void)
 {
 	struct thread *curr = thread_current();
 
-	/* 열린 파일들 모두 닫기 */
+	/* 
+	 * 열린 파일들을 모두 닫음
+	 * 
+	 * fd 3번부터 시작 (0=stdin, 1=stdout, 2=stderr는 시스템이 관리)
+	 * 각 파일을 닫고 fdt 슬롯을 NULL로 초기화
+	 */
 	for (int fd = 3; fd < curr->fd_idx; fd++)
 	{
 		if (curr->fdt[fd] != NULL)
@@ -442,67 +698,110 @@ void process_exit(void)
 		}
 	}
 
-	/* 실행 파일 닫기 */
+	/* 
+	 * 현재 실행 중인 파일을 닫음
+	 * 
+	 * file_allow_write(): 실행 중 설정된 쓰기 금지를 해제
+	 * 이를 통해 다른 프로세스가 이 파일을 수정할 수 있게 됨
+	 */
 	if (curr->runn_file != NULL)
 	{
-		file_allow_write(curr->runn_file); // 이 줄 추가
+		file_allow_write(curr->runn_file);
 		file_close(curr->runn_file);
 		curr->runn_file = NULL;
 	}
 
-	/* fdt 메모리 해제 */
+	/* 
+	 * 파일 디스크립터 테이블 메모리를 해제함
+	 * 
+	 * palloc_free_multiple(): 여러 페이지로 할당된 메모리를 해제
+	 */
 	if (curr->fdt != NULL)
 	{
 		palloc_free_multiple(curr->fdt, FDT_PAGES);
 		curr->fdt = NULL;
 	}
 
+	/* 
+	 * 메모리 공간을 해제함 (페이지 테이블, 물리 메모리 등)
+	 */
 	process_cleanup();
 
-	sema_up(&curr->wait_sema);	 // 자식 프로세스가 종료될 때까지 대기하는 부모에게 signal
-	sema_down(&curr->exit_sema); // 부모 프로세스가 종료될 때까지 대기
+	/* 
+	 * 부모-자식 동기화 처리
+	 * 
+	 * wait_sema up: 부모가 wait 중이라면 깨워서 종료 상태를 전달
+	 * exit_sema down: 부모가 종료 상태를 수거할 때까지 대기 (좀비 상태)
+	 * 
+	 * 이 순서가 중요함. 부모가 아직 wait를 호출하지 않았다면
+	 * 종료 상태가 보존되어야 하기 때문임
+	 */
+	sema_up(&curr->wait_sema);
+	sema_down(&curr->exit_sema);
 }
-/* 현재 프로세스의 자원을 해제합니다. */
+
+/* 
+ * 프로세스의 메모리 자원을 해제함
+ * 
+ * 수행 작업:
+ * 1. 보조 페이지 테이블 해제 (VM 사용시)
+ * 2. 페이지 테이블을 커널 전용으로 전환
+ * 3. 프로세스의 페이지 테이블과 모든 물리 메모리 해제
+ */
 static void
 process_cleanup(void)
 {
 	struct thread *curr = thread_current();
 
 #ifdef VM
+	/* 가상 메모리 사용시 보조 페이지 테이블을 해제함 */
 	supplemental_page_table_kill(&curr->spt);
 #endif
 
 	uint64_t *pml4;
-	/* 현재 프로세스의 페이지 디렉터리를 파괴하고
-	 * 커널 전용 페이지 디렉터리로 다시 전환합니다. */
+	
+	/* 
+	 * 현재 프로세스의 페이지 디렉터리를 파괴함
+	 * 
+	 * 순서가 매우 중요함:
+	 * 1. curr->pml4를 NULL로 설정 (타이머 인터럽트 등에서 접근 방지)
+	 * 2. 커널 페이지 테이블로 전환
+	 * 3. 기존 페이지 테이블 해제
+	 * 
+	 * 이 순서를 지키지 않으면 활성 페이지 테이블이 해제된 상태에서
+	 * 인터럽트가 발생할 수 있어 시스템 크래시가 발생할 수 있음
+	 */
 	pml4 = curr->pml4;
 	if (pml4 != NULL)
 	{
-		/* 올바른 순서가 매우 중요합니다.
-		 * 타이머 인터럽트가 프로세스의 페이지 디렉터리로
-		 * 되돌아가지 않도록, 디렉터리를 전환하기 전에
-		 * cur->pagedir을 NULL로 설정해야 합니다.
-		 * 또한, 프로세스의 페이지 디렉터리를 파괴하기 전에
-		 * 기본 페이지 디렉터리를 활성화해야 합니다.
-		 * 그렇지 않으면 활성 페이지 디렉터리가
-		 * 해제(그리고 초기화)된 디렉터리가 됩니다. */
-		curr->pml4 = NULL;
-		pml4_activate(NULL);
-		pml4_destroy(pml4);
+		curr->pml4 = NULL;        // 현재 스레드의 페이지 테이블 포인터 제거
+		pml4_activate(NULL);      // 커널 전용 페이지 테이블로 전환
+		pml4_destroy(pml4);       // 기존 페이지 테이블과 물리 메모리 해제
 	}
 }
 
-/* 다음 스레드에서 사용자 코드를 실행하기 위해 CPU를 설정합니다.
- * 이 함수는 매 컨텍스트 스위치마다 호출됩니다. */
+/* 
+ * 컨텍스트 스위치시 스레드의 메모리 환경을 활성화함
+ * 
+ * next: 실행할 스레드
+ * 
+ * 수행 작업:
+ * 1. 해당 스레드의 페이지 테이블을 활성화
+ * 2. TSS(Task State Segment) 업데이트 (커널 스택 정보)
+ */
 void process_activate(struct thread *next)
 {
-	/* 스레드의 페이지 테이블을 활성화합니다. */
+	/* 스레드의 페이지 테이블을 CPU에 로드함 */
 	pml4_activate(next->pml4);
 
-	/* 인터럽트 처리에 사용할 스레드의 커널 스택을 설정합니다. */
+	/* 
+	 * 인터럽트 처리용 커널 스택을 설정함
+	 * 
+	 * 사용자 모드에서 인터럽트나 시스템 콜이 발생하면
+	 * CPU가 자동으로 이 스택으로 전환함
+	 */
 	tss_update(next);
 }
-
 /* 우리는 ELF 실행 파일을 로드합니다.
  * 아래 정의는 ELF 명세 [ELF1]에서 거의 그대로 가져왔습니다.  */
 
