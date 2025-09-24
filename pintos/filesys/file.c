@@ -49,6 +49,7 @@ file_duplicate (struct file *file) {
 	return nfile;
 }
 
+/* Dup2 용 동일한 파일구조체를 반환함 */
 struct file *
 file_duplicate2 (struct file *file) {
 	inode_reopen (file->inode);
@@ -62,8 +63,7 @@ file_close (struct file *file) {
 	if (file != NULL) {
 		file_allow_write (file);
 		inode_close (file->inode);
-		file->ref_cnt--;
-		if (file->ref_cnt <= 0)
+		if (--file->ref_cnt <= 0)
 			free (file);
 	}
 }

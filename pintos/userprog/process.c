@@ -230,6 +230,8 @@ error:
 	thread_exit();
 }
 
+/* old_fd에 할당된 파일과 동일한 파일을 쓰는 fd를 반환
+   없으면 -1 반환 */
 int
 check_duplicated (struct thread *t, int old_fd)
 {
@@ -464,6 +466,9 @@ load (int argc, char **argv, struct intr_frame *if_) {
 		goto done;
 	}
 
+	// 이전에 실행중이었던 exec 닫기
+	if (t->exec != NULL)
+		file_close(t->exec);
 	t->exec = file;
 	file_deny_write(file);
 
@@ -588,7 +593,8 @@ load (int argc, char **argv, struct intr_frame *if_) {
 	success = true;
 
 done:
-	if (!success) file_close(file);
+	if (!success)
+		if (file != NULL) file_close(file);
 	return success;
 }
 

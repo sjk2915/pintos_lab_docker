@@ -12,6 +12,7 @@
         "lib.h": "c",
         "string_view": "c",
         "thread.h": "c",
-        "palloc.h": "c"
+        "palloc.h": "c",
+        "stdint.h": "c"
     }
 }
