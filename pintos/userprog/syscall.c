@@ -277,6 +277,45 @@ void syscall_handler(struct intr_frame *f)
         f->R.rax = process_wait(pid);
         break;
     }
+    case SYS_SEEK:
+    {
+        int fd = (int)f->R.rdi;
+        unsigned position = (unsigned)f->R.rsi;
+
+        struct file *file = get_file(fd);
+        if (file != NULL)
+        {
+            lock_acquire(&filesys_lock);
+            file_seek(file, position);
+            lock_release(&filesys_lock);
+        }
+        break;
+    }
+    case SYS_TELL:
+    {
+        int fd = (int)f->R.rdi;
+        struct file *file = get_file(fd);
+        if (file == NULL)
+        {
+            f->R.rax = -1;
+            break;
+        }
+
+        lock_acquire(&filesys_lock);
+        f->R.rax = file_tell(file);
+        lock_release(&filesys_lock);
+        break;
+    }
+    case SYS_REMOVE:
+    {
+        const char *file = (const char *)f->R.rdi;
+        check_address((void *)file);
+
+        lock_acquire(&filesys_lock);
+        f->R.rax = filesys_remove(file);
+        lock_release(&filesys_lock);
+        break;
+    }
     default:
         printf("Unknown system call: %d\n", (int)nr);
         printf("%s: exit(-1)\n", thread_current()->name);
