@@ -225,8 +225,8 @@ __do_fork (void *aux) {
 	if (succ)
 		do_iret (&if_);
 error:
-	sema_up(&parent->fork_sema);
 	current->exit_status = -1;
+	sema_up(&parent->fork_sema);
 	thread_exit();
 }
 
