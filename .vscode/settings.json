@@ -13,6 +13,11 @@
         "string_view": "c",
         "thread.h": "c",
         "palloc.h": "c",
-        "stdint.h": "c"
-    }
+        "stdint.h": "c",
+        "anon.h": "c",
+        "page_cache.h": "c",
+        "mmu.h": "c",
+        "pte.h": "c"
+    },
+    "files.eol": "\n"
 }

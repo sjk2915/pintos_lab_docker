@@ -3,15 +3,16 @@
 
 #include "threads/thread.h"
 
-tid_t process_create_initd (const char *file_name);
-tid_t process_fork (const char *name, struct intr_frame *if_);
-int process_exec (void *f_name);
-int process_wait (tid_t);
-void process_exit (void);
-void process_activate (struct thread *next);
+tid_t process_create_initd(const char *file_name);
+tid_t process_fork(const char *name, struct intr_frame *if_);
+int process_exec(void *f_name);
+int process_wait(tid_t);
+void process_exit(void);
+void process_activate(struct thread *next);
 
 // fork에 인자전달용 구조체
-struct fork_args {
+struct fork_args
+{
     struct thread *t;
     struct intr_frame *if_;
 };
