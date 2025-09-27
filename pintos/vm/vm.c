@@ -142,6 +142,8 @@ static struct frame *vm_get_frame(void)
     /* TODO: Fill this function. */
     struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
     frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+    // 여기에 할당 실패시 페이지 치우고 다시 할당받는 로직 필요
+    // 현재는 없음
     frame->page = NULL;
 
     ASSERT(frame != NULL);
