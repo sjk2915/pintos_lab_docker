@@ -8,6 +8,7 @@
  * function.
  * */
 
+#include "vm/vm.h"
 #include "vm/uninit.h"
 
 static bool uninit_initialize(struct page *page, void *kva);

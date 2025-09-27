@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
 #include "threads/pte.h"
 
 typedef bool pte_for_each_func(uint64_t *pte, void *va, void *aux);

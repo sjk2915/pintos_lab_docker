@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-void syscall_init(void);
+void syscall_init (void);
 
 typedef int pid_t;
 

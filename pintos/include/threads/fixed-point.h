@@ -6,11 +6,11 @@ typedef int32_t fp;
 // Suppose that we are using a p.q fixed-point format, and let f = 2^q
 #define F (1 << 14)
 // Convert n to fixed point
-#define int_to_fp(n) ((n)*F)
+#define int_to_fp(n) ((n) * F)
 // Convert x to integer (rounding toward zero)
 #define fp_to_int(x) ((x) / F)
 // Convert x to integer (rounding to nearest)
-#define fp_to_int_round(x) (((x) >= 0) ? (((x) + F / 2) / F) : (((x)-F / 2) / F))
+#define fp_to_int_round(x) (((x) >= 0) ? (((x) + F/2)/F) : (((x) - F/2)/F))
 // Add x and y
 #define add_fp(x, y) ((x) + (y))
 // Subtract y from x

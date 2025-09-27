@@ -3,6 +3,6 @@
 
 #include <stddef.h>
 
-void putbuf(const char *, size_t);
+void putbuf (const char *, size_t);
 
 #endif /* lib/kernel/stdio.h */
