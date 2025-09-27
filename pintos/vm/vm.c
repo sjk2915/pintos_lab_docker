@@ -1,9 +1,8 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
-#include "vm/vm.h"
-
 #include "threads/malloc.h"
 #include "threads/mmu.h"
+#include "vm/vm.h"
 #include "vm/inspect.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
