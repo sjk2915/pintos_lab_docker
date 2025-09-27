@@ -39,8 +39,6 @@ struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
 
-#define VA_PAGE_DOWN(va) ((void *)((int)(va) & (~0xFFF)))
-
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
@@ -98,6 +96,14 @@ struct page_operations
 struct supplemental_page_table
 {
     struct hash pages;
+};
+
+struct segment_info
+{
+    struct file *file;
+    off_t ofs;
+    size_t read_byte;
+    size_t zero_byte;
 };
 
 #include "threads/thread.h"

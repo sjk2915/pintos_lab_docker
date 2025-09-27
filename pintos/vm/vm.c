@@ -1,9 +1,8 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
-#include "vm/vm.h"
-
 #include "threads/malloc.h"
 #include "threads/mmu.h"
+#include "vm/vm.h"
 #include "vm/inspect.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -93,9 +92,10 @@ struct page *spt_find_page(struct supplemental_page_table *spt, void *va)
 {
     /* TODO: Fill this function. */
     struct page key = {
-        .va = va,
+        .va = pg_round_down(va),
     };
-    return hash_find(&spt->pages, &key.elem);
+    struct hash_elem *to_find = hash_find(&spt->pages, &key.elem);
+    return to_find == NULL ? NULL : hash_entry(to_find, struct page, elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -141,6 +141,8 @@ static struct frame *vm_get_frame(void)
     /* TODO: Fill this function. */
     struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
     frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+    // 여기에 할당 실패시 페이지 치우고 다시 할당받는 로직 필요
+    // 현재는 없음
     frame->page = NULL;
 
     ASSERT(frame != NULL);
@@ -222,13 +224,13 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
      * TODO: writeback all the modified contents to the storage. */
 }
 
-uint64_t spt_hash_func(const struct hash_elem *e, void *aux)
+uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED)
 {
     struct page *p = hash_entry(e, struct page, elem);
     return hash_bytes(&p->va, sizeof p->va);
 }
 
-bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux)
+bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
 {
     struct page *pa = hash_entry(a, struct page, elem);
     struct page *pb = hash_entry(b, struct page, elem);
