@@ -93,9 +93,10 @@ struct page *spt_find_page(struct supplemental_page_table *spt, void *va)
 {
     /* TODO: Fill this function. */
     struct page key = {
-        .va = va,
+        .va = pg_round_down(va),
     };
-    return hash_find(&spt->pages, &key.elem);
+    struct hash_elem *to_find = hash_find(&spt->pages, &key.elem);
+    return to_find == NULL ? NULL : hash_entry(to_find, struct page, elem);
 }
 
 /* Insert PAGE into spt with validation. */
