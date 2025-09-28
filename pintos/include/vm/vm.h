@@ -7,7 +7,7 @@
 
 enum vm_type
 {
-    /* page not initialize */
+    /* page not initialized */
     VM_UNINIT = 0,
     /* page not related to the file, aka anonymous page */
     VM_ANON = 1,
@@ -50,7 +50,8 @@ struct page
     struct frame *frame; /* Back reference for frame */
 
     /* Your implementation */
-    struct hash_elem hash_elem; /*  */
+    struct hash_elem elem; /* 해쉬테이블에 넣을 elem */
+    bool writable;
 
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
@@ -114,8 +115,8 @@ struct page *spt_find_page(struct supplemental_page_table *spt, void *va);
 bool spt_insert_page(struct supplemental_page_table *spt, struct page *page);
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page);
 
-unsigned supplemental_page_hash(const struct hash_elem *p_, void *aux);
-bool supplemental_page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux);
+uint64_t spt_hash_func(const struct hash_elem *e, void *aux);
+bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
 void vm_init(void);
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present);
