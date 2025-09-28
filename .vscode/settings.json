@@ -17,7 +17,10 @@
         "anon.h": "c",
         "page_cache.h": "c",
         "mmu.h": "c",
-        "pte.h": "c"
+        "pte.h": "c",
+        "unordered_map": "c",
+        "numeric": "c",
+        "ostream": "c"
     },
     "files.eol": "\n"
 }
