@@ -205,7 +205,9 @@ bool vm_claim_page(void *va UNUSED)
     struct page *page = NULL; // va를 이용해 페이지를 찾기
     struct thread *t = thread_current();
     /* TODO: Fill this function */
-
+    page = spt_find_page(&t->spt, va);
+    if (page == NULL)
+        return false;
     return vm_do_claim_page(page);
 }
 
