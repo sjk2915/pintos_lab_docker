@@ -816,6 +816,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
+        ofs += page_read_bytes;
         upage += PGSIZE;
     }
     return true;
@@ -831,6 +832,9 @@ static bool setup_stack(struct intr_frame *if_)
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
+    vm_alloc_page(VM_ANON, stack_bottom, true);
+    vm_claim_page(stack_bottom);
+    if_->rsp = USER_STACK;
 
     return success;
 }

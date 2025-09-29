@@ -5,14 +5,6 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
-/*
-load_segment->vm_alloc_page_with_initializer->create page uninit_new->page fault
-
-->vm_try_handle_fault->vm_do_claim_page->vm_get_frame->pml4_set_page->swap_in
-
-->uninit_initialize->anon_initializer->lazy_load_segment
-*/
-
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void)
@@ -159,8 +151,10 @@ static struct frame *vm_get_frame(void)
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED)
+static void vm_stack_growth(void *addr)
 {
+    vm_alloc_page(VM_ANON, addr, true);
+    vm_claim_page(addr);
 }
 
 /* Handle the fault on write_protected page */
@@ -177,13 +171,18 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
 
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
-    // spt에 해당 주소에 대해 사용자 프로세스가 기대하는 데이터가 없다고 표시되어 있거나,
-    // 그 페이지가 커널 가상 메모리 범위에 속해 있거나,
-    // 읽기 전용 페이지에 쓰려고 시도한 경우에는 해당 접근은 유효하지 않은 접근
-    if (page == NULL || is_kernel_vaddr(page->va) || (!page->writable && write))
+    if (!not_present || is_kernel_vaddr(addr))
     {
-        // 모든 자원 해제?
-        spt_remove_page(spt, page);
+        return false;
+    }
+
+    if (page == NULL)
+    {
+        if (addr >= f->rsp && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        {
+            vm_stack_growth(addr);
+            return true;
+        }
         return false;
     }
 
