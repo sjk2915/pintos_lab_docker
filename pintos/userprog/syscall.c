@@ -71,6 +71,8 @@ void syscall_init(void)
 void syscall_handler(struct intr_frame *f)
 {
     // TODO: Your implementation goes here.
+    thread_current()->user_rsp = f->rsp;
+
     switch (f->R.rax)
     {
     case SYS_HALT:
@@ -127,9 +129,10 @@ void syscall_handler(struct intr_frame *f)
 
 static void check_ptr(void *ptr)
 {
-    if (ptr == NULL                                            // null 포인터
-        || is_kernel_vaddr(ptr)                                // 커널 메모리 침범
-        || pml4_get_page(thread_current()->pml4, ptr) == NULL) // 매핑안됨
+    if (ptr == NULL              // null 포인터
+        || is_kernel_vaddr(ptr)) // 커널 메모리 침범
+        // pml4_get_page(thread_current()->pml4, ptr) == NULL
+        // 매핑안되도 페이지폴트 핸들러가 커버가능!
         sys_exit(-1);
 }
 
@@ -262,6 +265,11 @@ static int sys_read(int fd, void *buffer, unsigned size)
 {
     check_ptr(buffer);
     struct thread *cur = thread_current();
+    // 버퍼 검증
+    struct page *page = spt_find_page(&cur->spt, buffer);
+    if (page && !page->writable)
+        sys_exit(-1);
+
     if (check_fd(cur, fd) == -1)
         return -1;
 

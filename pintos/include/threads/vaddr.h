@@ -21,7 +21,7 @@
 #define PGMASK BITMASK(PGSHIFT, PGBITS) /* Page offset bits (0:12). */
 
 /* Offset within a page. */
-#define pg_ofs(va) ((uint64_t)(va)&PGMASK)
+#define pg_ofs(va) ((uint64_t)(va) & PGMASK)
 
 #define pg_no(va) ((uint64_t)(va) >> PGBITS)
 
@@ -36,6 +36,9 @@
 
 /* User stack start */
 #define USER_STACK 0x47480000
+
+/* User stack max 스택 오버플로우 1메가 */
+#define USER_STACK_MAX (USER_STACK - (1 << 20))
 
 /* Returns true if VADDR is a user virtual address. */
 #define is_user_vaddr(vaddr) (!is_kernel_vaddr((vaddr)))

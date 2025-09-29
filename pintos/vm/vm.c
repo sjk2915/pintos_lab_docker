@@ -4,6 +4,7 @@
 #include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include <string.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -38,6 +39,9 @@ enum vm_type page_get_type(struct page *page)
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
+
+static uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED);
+static bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -74,6 +78,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
         }
         uninit_new(new_page, upage, init, type, aux, initializer);
         new_page->writable = writable;
+        new_page->is_stack = type & VM_STACK;
         /* TODO: Insert the page into the spt. */
         if (spt_insert_page(spt, new_page))
             return true;
@@ -151,8 +156,9 @@ static struct frame *vm_get_frame(void)
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED)
+static bool vm_stack_growth(void *addr)
 {
+    return (vm_alloc_page(VM_ANON | VM_STACK, pg_round_down(addr), true) && vm_claim_page(addr));
 }
 
 /* Handle the fault on write_protected page */
@@ -161,15 +167,28 @@ static bool vm_handle_wp(struct page *page UNUSED)
 }
 
 /* Return true on success */
-bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED,
-                         bool write UNUSED, bool not_present UNUSED)
+bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present)
 {
-    struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
-    struct page *page = NULL;
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
+    if (not_present)
+    {
+        struct thread *cur = thread_current();
+        struct supplemental_page_table *spt = &cur->spt;
+        struct page *page = spt_find_page(spt, addr);
+        if (page == NULL)
+        {
+            // 스택 영역내에있으면 스택성장
+            uintptr_t *rsp = user ? f->rsp : cur->user_rsp;
+            if (addr >= rsp - 8 && USER_STACK > addr && addr >= USER_STACK_MAX)
+                return vm_stack_growth(addr);
+            else
+                return false;
+        }
+        return vm_do_claim_page(page);
+    }
 
-    return vm_do_claim_page(page);
+    return false;
 }
 
 /* Free the page.
