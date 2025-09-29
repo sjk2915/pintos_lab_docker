@@ -1,8 +1,9 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
+
+#include "kernel/hash.h"
 #include "threads/palloc.h"
-#include "lib/kernel/hash.h"
 
 enum vm_type
 {
@@ -44,14 +45,14 @@ struct thread;
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page
 {
-    enum vm_type vm_type;
     const struct page_operations *operations;
     void *va;            /* Address in terms of user space */
     struct frame *frame; /* Back reference for frame */
 
     /* Your implementation */
-    struct hash_elem hash_elem;
+    struct hash_elem elem; /* 해쉬테이블에 넣을 elem */
     bool writable;
+
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
     union {
@@ -69,14 +70,6 @@ struct frame
 {
     void *kva;
     struct page *page;
-};
-
-struct segment_aux
-{
-    struct file *file;
-    off_t ofs;
-    uint32_t read_bytes;
-    uint32_t zero_bytes;
 };
 
 /* The function table for page operations.
@@ -121,6 +114,9 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt);
 struct page *spt_find_page(struct supplemental_page_table *spt, void *va);
 bool spt_insert_page(struct supplemental_page_table *spt, struct page *page);
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page);
+
+uint64_t spt_hash_func(const struct hash_elem *e, void *aux);
+bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
 void vm_init(void);
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present);

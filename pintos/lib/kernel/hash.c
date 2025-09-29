@@ -131,8 +131,7 @@ struct hash_elem *hash_find(struct hash *h, struct hash_elem *e)
 
    If the elements of the hash table are dynamically allocated,
    or own resources that are, then it is the caller's
-   responsibility to deallocate them.
-    hash h에서 e와 동일한 원소를 찾아 제거하고 반환 */
+   responsibility to deallocate them. */
 struct hash_elem *hash_delete(struct hash *h, struct hash_elem *e)
 {
     struct hash_elem *found = find_elem(h, find_bucket(h, e), e);
