@@ -143,7 +143,7 @@ static struct frame *vm_get_frame(void)
     ASSERT(frame != NULL);
     ASSERT(frame->page == NULL);
 
-    frame->kva = palloc_get_page(PAL_ZERO | PAL_USER);
+    frame->kva = palloc_get_page(PAL_ZERO | PAL_USER); // USER풀에 할당
     if (frame->kva == NULL)
     {
         free(frame);
@@ -205,7 +205,6 @@ bool vm_claim_page(void *va UNUSED)
 {
     struct page *page = NULL; // va를 이용해 페이지를 찾기
     struct thread *t = thread_current();
-    // t->spt.
     /* TODO: Fill this function */
     struct page *page = spt_find_page(&thread_current()->spt, va);
 
@@ -220,12 +219,20 @@ static bool vm_do_claim_page(struct page *page)
 {
     struct frame *frame = vm_get_frame();
 
+    if (frame == NULL)
+        return false;
+
     /* Set links */
     frame->page = page;
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-    // pml4_set_page()
+    /* TODO: 페이지의 가상 주소(VA)를 프레임의 물리 주소(PA)에 매핑하기 위해 페이지 테이블 엔트리를
+     * 삽입하세요. */
+
+    if (!pml4_set_page(thread_current()->pml4, page, frame, page->writable))
+        return false;
+
     return swap_in(page, frame->kva);
 }
 
