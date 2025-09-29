@@ -772,6 +772,9 @@ static bool lazy_load_segment(struct page *page, void *aux)
     /* TODO: Load the segment from the file */
     /* TODO: This called when the first page fault occurs on address VA. */
     /* TODO: VA is available when calling this function. */
+    /* TODO: 파일로부터 세그먼트를 로드하세요. */
+    /* TODO: 이 함수는 VA 주소에서 첫 번째 페이지 폴트가 발생했을 때 호출됩니다. */
+    /* TODO: 이 함수를 호출할 때 VA는 사용 가능합니다. */
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
