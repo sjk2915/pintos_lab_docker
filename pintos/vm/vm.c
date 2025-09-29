@@ -57,10 +57,14 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
         /* TODO: Create the page, fetch the initialier according to the VM type,
          * TODO: and then create "uninit" page struct by calling uninit_new. You
-
          * TODO: should modify the field after calling the uninit_new. */
-
         /* TODO: Insert the page into the spt. */
+
+        /* TODO: 페이지를 생성하고, VM 타입에 따라 초기화 함수(initializer)를 가져온 후,
+         * TODO: uninit_new를 호출하여 "uninit" 페이지 구조체를 생성하세요.
+         * TODO: uninit_new를 호출한 후에는 필드를 수정해야 합니다. */
+        /* TODO: 페이지를 보조 페이지 테이블(spt)에 삽입하세요. */
+
         // uninit_new()
     }
 err:
@@ -122,9 +126,13 @@ static struct frame *vm_evict_frame(void)
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
+/* palloc()을 통해 프레임을 가져옵니다. 만약 사용 가능한 페이지가 없다면,
+ * 페이지를 축출(evict)하고 해당 프레임을 반환합니다. 이 함수는 항상 유효한 주소를
+ * 반환합니다. 즉, 유저 풀 메모리가 가득 찼다면, 이 함수는 프레임을 축출하여
+ * 사용 가능한 메모리 공간을 확보합니다. */
 static struct frame *vm_get_frame(void)
 {
-    struct frame *frame = NULL;
+    struct frame *frame = malloc(sizeof(struct frame));
     /* TODO: Fill this function. */
     struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
     frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
@@ -134,6 +142,14 @@ static struct frame *vm_get_frame(void)
 
     ASSERT(frame != NULL);
     ASSERT(frame->page == NULL);
+
+    frame->kva = palloc_get_page(PAL_ZERO | PAL_USER);
+    if (frame->kva == NULL)
+    {
+        free(frame);
+        return NULL;
+    }
+    frame->page = NULL;
     return frame;
 }
 
