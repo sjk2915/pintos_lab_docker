@@ -767,11 +767,19 @@ static bool install_page(void *upage, void *kpage, bool writable)
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
-lazy_load_segment (struct page *page, void *aux) {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
+static bool lazy_load_segment(struct page *page, void *aux)
+{
+    /* TODO: Load the segment from the file */
+    /* TODO: This called when the first page fault occurs on address VA. */
+    /* TODO: VA is available when calling this function. */
+    struct segment_info *seg_info = (struct segment_info *)aux;
+    void *upage = page->frame->kva;
+    off_t read_byte = file_read_at(seg_info->file, upage, seg_info->read_byte, seg_info->ofs);
+    memset(upage + read_byte, 0, seg_info->zero_byte);
+
+    file_close(seg_info->file);
+    free(aux);
+    return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -805,12 +813,14 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
         struct segment_info *aux = (struct segment_info *)malloc(sizeof(struct segment_info));
-        *aux = (struct segment_info){
-            .file = file_reopen(file),
-            .ofs = ofs,
-            .read_byte = page_read_bytes,
-            .zero_byte = page_zero_bytes,
-        };
+        *aux = (struct segment_info)
+
+            {
+                .file = file_reopen(file),
+                .ofs = ofs,
+                .read_byte = page_read_bytes,
+                .zero_byte = page_zero_bytes,
+            };
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
             return false;
 
