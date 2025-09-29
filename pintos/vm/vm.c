@@ -42,6 +42,7 @@ static struct frame *vm_evict_frame(void);
 
 static uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED);
 static bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
+static void spt_destroy_func(struct hash_elem *e, void *aux UNUSED);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -231,16 +232,59 @@ void supplemental_page_table_init(struct supplemental_page_table *spt)
 }
 
 /* Copy supplemental page table from src to dst */
-bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED)
+bool supplemental_page_table_copy(struct supplemental_page_table *dst,
+                                  struct supplemental_page_table *src)
 {
+    struct hash_iterator i;
+    hash_first(&i, src);
+    while (hash_next(&i))
+    {
+        struct page *src_page = hash_entry(hash_cur(&i), struct page, elem);
+        switch (page_get_type(src_page))
+        {
+        case VM_UNINIT:
+            struct segment_info *src_aux = src_page->uninit.aux;
+            struct segment_info *dst_aux =
+                (struct segment_info *)malloc(sizeof(struct segment_info));
+            if (dst_aux == NULL)
+                return false;
+            *dst_aux = (struct segment_info){
+                .file = file_reopen(src_aux->file),
+                .ofs = src_aux->ofs,
+                .read_byte = src_aux->read_byte,
+                .zero_byte = src_aux->zero_byte,
+            };
+            if (!vm_alloc_page_with_initializer(VM_ANON, src_page->va, src_page->writable,
+                                                src_page->uninit.init, dst_aux))
+            {
+                free(dst_aux);
+                return false;
+            }
+            break;
+
+        case VM_ANON:
+            if (!(vm_alloc_page(VM_ANON, src_page->va, src_page->writable) &&
+                  vm_claim_page(src_page->va)))
+                return false;
+            memcpy(spt_find_page(dst, src_page->va)->frame->kva, src_page->frame->kva, PGSIZE);
+            break;
+
+        case VM_FILE:
+            break;
+
+        default:
+            return false;
+        }
+    }
+    return true;
 }
 
 /* Free the resource hold by the supplemental page table */
-void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
+void supplemental_page_table_kill(struct supplemental_page_table *spt)
 {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
+    hash_clear(&spt->pages, spt_destroy_func);
 }
 
 uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED)
@@ -254,4 +298,10 @@ bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *a
     struct page *pa = hash_entry(a, struct page, elem);
     struct page *pb = hash_entry(b, struct page, elem);
     return pa->va < pb->va;
+}
+
+void spt_destroy_func(struct hash_elem *e, void *aux UNUSED)
+{
+    struct page *p = hash_entry(e, struct page, elem);
+    vm_dealloc_page(p);
 }
