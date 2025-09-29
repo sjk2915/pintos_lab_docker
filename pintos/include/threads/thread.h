@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -27,6 +28,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
 
 /* A kernel thread or user process.
  *
@@ -86,8 +88,10 @@ typedef int tid_t;
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
 
+/** project2-System Call */
+#define FDT_PAGES     3                     // test `multi-oom` 테스트용
+#define FDCOUNT_LIMIT FDT_PAGES * (1 << 9)  // 엔트리가 512개 인 이유: 페이지 크기 4kb / 파일 포인터 8byte
 
-#define FD_MAX 128
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
@@ -103,8 +107,20 @@ struct thread {
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
 
-    struct file *fd_table[FD_MAX];  // 정적 배열로 변경
-    int next_fd;
+ 	// 파일 관리
+    struct file **fdt;       // 파일 디스크립터 테이블
+    int fd_idx;             // 다음 할당할 fd
+    struct file *runn_file;  // 실행중인 파일
+    
+    // 부모-자식 관계 관리
+    struct intr_frame parent_if;    // 부모 프로세스의 interrupt frame
+    struct list child_list;         // 자식 프로세스 리스트
+    struct list_elem child_elem;    // 부모의 child_list에 들어갈 원소
+    
+    // 동기화용 semaphore
+    struct semaphore fork_sema;     // fork 완료 대기용
+    struct semaphore exit_sema;     // 자식 프로세스 종료 대기용  
+    struct semaphore wait_sema;     // wait 시스템콜 대기용
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

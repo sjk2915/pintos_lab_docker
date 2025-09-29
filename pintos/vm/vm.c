@@ -60,25 +60,6 @@ err:
 	return false;
 }
 
-/* Find VA from spt and return page. On error, return NULL. */
-struct page *
-spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function. */
-
-	return page;
-}
-
-/* Insert PAGE into spt with validation. */
-bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
-	int succ = false;
-	/* TODO: Fill this function. */
-
-	return succ;
-}
-
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	vm_dealloc_page (page);
@@ -171,10 +152,6 @@ vm_do_claim_page (struct page *page) {
 	return swap_in (page, frame->kva);
 }
 
-/* Initialize new supplemental page table */
-void
-supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-}
 
 /* Copy supplemental page table from src to dst */
 bool
@@ -187,4 +164,71 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+
+/* 해시 함수: 페이지의 가상 주소를 해시값으로 변환 */
+static unsigned page_hash(const struct hash_elem *e, void *aux) {
+    // 1. hash_elem으로부터 struct page를 얻어야 함
+	// Pintos가 제공하는 hash_entry 매크로
+	struct page *p = hash_entry(e, struct page, hash_elem);
+
+    // 2. page의 va를 해시값으로 변환
+	// unsigned va= &p->va;
+	return hash_bytes(&p->va, sizeof p->va);
+
+}
+
+/* 비교 함수: 두 페이지를 비교 (a < b?) */
+static bool page_less(const struct hash_elem *a, 
+                      const struct hash_elem *b, 
+                      void *aux) {
+    // 1. 두 hash_elem으로부터 각각 struct page 얻기
+	struct page *p1= hash_entry(a, struct page, hash_elem);
+	struct page *p2= hash_entry(b, struct page, hash_elem);
+    
+	// 2. va 주소 비교
+	return p1->va < p2->va;
+
+	/*
+	struct page *p1 = ...;
+	p1->va      // va에 "저장된 값" (가상 주소, 예: 0x400000)
+	&p1->va     // va 필드 자체의 "메모리 주소" (struct page 내부 어딘가)
+	*/
+}
+
+/* Initializes the supplemental page table. */
+void supplemental_page_table_init(struct supplemental_page_table *spt) {
+    // hash_init(해시테이블, 해시함수, 비교함수, aux)
+    // aux는 NULL로 두면 됨 (지금은 안 씀)
+	hash_init(&spt->pages, page_hash, page_less, NULL);
+}
+
+/* Find VA from spt and return page. On error, return NULL. */
+struct page *spt_find_page(struct supplemental_page_table *spt, void *va) {
+    // 1. 임시 page 구조체 만들기 (키로 사용)
+    // 2. hash_find()로 찾기 - 해시 테이블에 저장된 struct page들 중에서, va가 일치하는 페이지
+    // 3. 결과가 NULL이면 NULL 리턴
+    // 4. hash_elem → struct page 변환해서 리턴
+	struct page p;
+	p.va=va; //검색할 가상주소만 스택에 저장
+
+	//임시 페이지의 hash_elem 주소를 hash_find에 전달
+	struct hash_elem *e= hash_find(&spt->pages, &p.hash_elem);
+
+	//못찾으면 널 리턴
+	if (e==NULL)
+		return NULL;
+
+	//찾았으면 hash_elem -> struct page 변환
+	return hash_entry(e, struct page, hash_elem);
+}
+
+/* Insert PAGE into spt with validation. */
+bool spt_insert_page(struct supplemental_page_table *spt, struct page *page) {
+    // 1. hash_insert()로 삽입
+    // 2. 반환값이 NULL이면 성공 (기존에 없었음)
+    // 3. 반환값이 NULL 아니면 실패 (이미 존재)
+
+
 }

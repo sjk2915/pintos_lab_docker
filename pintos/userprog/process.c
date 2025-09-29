@@ -180,11 +180,11 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
 	 * 부모가 먼저 실행을 계속해버릴 수 있음
 	 */
 	struct thread *child = get_child_process(tid);
-	// sema_down(&child->fork_sema);
+	sema_down(&child->fork_sema);
 
 	// /* 자식의 초기화가 실패했다면 에러를 반환함 */
-	// if (child->exit_status == TID_ERROR)
-	// 	return TID_ERROR;
+	if (child->exit_status == TID_ERROR)
+		return TID_ERROR;
 
 	return tid;  // 부모는 자식의 TID를 받음
 }
@@ -262,143 +262,62 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux)
 }
 #endif
 
-/* 
- * 실제 fork 작업을 수행하는 스레드 함수
- * 이 함수는 새로 생성된 자식 스레드에서 실행됨
- * 
- * aux: process_fork()에서 전달한 부모 스레드 포인터
- * 
- * 동작 순서:
- * 1. 부모의 CPU 상태를 복원 (단, 반환값은 0으로 설정)
- * 2. 부모의 메모리 공간을 복제
- * 3. 부모의 파일 디스크립터 테이블을 복제
- * 4. 부모에게 완료 신호를 보냄
- * 5. 사용자 모드로 점프하여 fork() 시스템 콜의 다음 줄부터 실행
- */
 static void __do_fork(void *aux)
 {
-	struct intr_frame if_;
-	struct thread *parent = (struct thread *)aux;      // 부모 스레드
-	struct thread *current = thread_current();         // 자식 스레드 (현재)
-	struct intr_frame *parent_if = &parent->parent_if; // 부모가 저장한 CPU 상태
-	bool succ = true;
+    struct intr_frame if_;
+    struct thread *parent = (struct thread *)aux;
+    struct thread *current = thread_current();
+    struct intr_frame *parent_if = &parent->parent_if;
+    bool succ = true;
 
-	/* 
-	 * 1단계: 부모의 CPU 컨텍스트를 복원함
-	 * 
-	 * 부모가 fork() 시스템 콜을 호출한 시점의 모든 레지스터 값,
-	 * 스택 포인터, 플래그 등을 자식이 그대로 가져옴
-	 * 단, rax(반환값) 레지스터만은 0으로 설정하여
-	 * 자식에서 fork()가 0을 반환하도록 함
-	 */
-	memcpy(&if_, parent_if, sizeof(struct intr_frame));
-	if_.R.rax = 0; // 자식 프로세스의 fork() 반환값은 0
+    memcpy(&if_, parent_if, sizeof(struct intr_frame));
+    if_.R.rax = 0;
 
-	/* 
-	 * 2단계: 새로운 페이지 테이블을 생성함
-	 * 
-	 * 자식은 부모와는 독립적인 가상 메모리 공간을 가져야 함
-	 * pml4_create(): 새로운 4단계 페이지 테이블 생성
-	 */
-	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
-		goto error;
+    current->pml4 = pml4_create();
+    if (current->pml4 == NULL)
+        goto error;
 
-	/* 
-	 * 실행 파일 정보도 복사함
-	 * 
-	 * 부모가 실행 중인 파일을 자식도 동일하게 참조해야 함
-	 * file_duplicate(): 파일 구조체를 복제 (동일한 파일, 독립적인 파일 포인터)
-	 */
-	if (parent->runn_file != NULL)
-	{
-		current->runn_file = file_duplicate(parent->runn_file);
-	}
+    if (parent->runn_file != NULL)
+    {
+        current->runn_file = file_duplicate(parent->runn_file);
+    }
 
-	/* 자식의 페이지 테이블을 활성화함 */
-	process_activate(current);
+    process_activate(current);
 
-	/* 
-	 * 3단계: 메모리 내용을 복제함
-	 * 
-	 * VM이 활성화된 경우와 그렇지 않은 경우로 나뉨
-	 */
 #ifdef VM
-	/* 가상 메모리 사용시: 보조 페이지 테이블도 함께 복제 */
-	supplemental_page_table_init(&current->spt);
-	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
-		goto error;
+    supplemental_page_table_init(&current->spt);
+    if (!supplemental_page_table_copy(&current->spt, &parent->spt))
+        goto error;
 #else
-	/* 
-	 * 기본 모드: 부모의 모든 페이지를 직접 복제
-	 * 
-	 * pml4_for_each(): 부모의 페이지 테이블을 순회하며
-	 * 각 페이지에 대해 duplicate_pte() 함수를 호출
-	 */
-	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
-		goto error;
+    if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
+        goto error;
 #endif
 
-	/* 
-	 * 4단계: 파일 디스크립터 테이블을 복제함
-	 * 
-	 * fork의 중요한 특징 중 하나는 부모가 열어둔 모든 파일을
-	 * 자식도 동일하게 열어두는 것임 (단, 독립적인 파일 포인터)
-	 */
-	
-	/* 부모의 fd 개수가 한계를 넘으면 에러 */
-	if (parent->fd_idx >= FDCOUNT_LIMIT)
-		goto error;
+    if (parent->fd_idx >= FDCOUNT_LIMIT)
+        goto error;
 
-	current->fd_idx = parent->fd_idx;  // 자식의 fd 인덱스 설정
+    current->fd_idx = parent->fd_idx;
 
-	/* 
-	 * fd 3번부터 복제함 (0=stdin, 1=stdout, 2=stderr는 기본값 사용)
-	 * 
-	 * 각 파일에 대해 file_duplicate()를 호출하여
-	 * 동일한 파일을 가리키되 독립적인 파일 포인터를 가지도록 함
-	 */
-	for (int fd = 3; fd < parent->fd_idx; fd++)
-	{
-		if (parent->fdt[fd] == NULL)
-			continue;  // 빈 슬롯은 건너뜀
-		current->fdt[fd] = file_duplicate(parent->fdt[fd]);
-	}
+    for (int fd = 3; fd < parent->fd_idx; fd++)
+    {
+        if (parent->fdt[fd] == NULL)
+            continue;
+        current->fdt[fd] = file_duplicate(parent->fdt[fd]);
+    }
 
-	/* 
-	 * 5단계: 부모에게 완료 신호를 보냄
-	 * 
-	 * 부모는 process_fork()에서 이 신호를 기다리고 있음
-	 * 이 시점에서 자식의 초기화가 완전히 끝났으므로
-	 * 부모가 안전하게 실행을 계속할 수 있음
-	 */
-	//sema_up(&current->fork_sema);
+    // 성공 신호를 먼저 보냄
+    sema_up(&current->fork_sema);
+    
+    process_init();
 
-	/* 프로세스 초기화 (현재는 빈 함수) */
-	process_init();
-
-	/* 
-	 * 6단계: 사용자 모드로 전환함
-	 * 
-	 * do_iret(): interrupt return 명령어를 통해 사용자 모드로 점프
-	 * 이 시점에서 자식은 부모가 fork()를 호출한 바로 그 지점부터
-	 * 실행을 재개함 (단, fork() 반환값은 0)
-	 * 
-	 * 이 함수는 절대 리턴하지 않음
-	 */
-	if (succ)
-		do_iret(&if_);
+    // 여기서 직접 사용자 모드로 전환
+    do_iret(&if_);
+    NOT_REACHED(); // 이 줄에 절대 도달하면 안됨
 
 error:
-	/* 
-	 * 초기화 실패시 처리
-	 * 
-	 * 부모에게 실패를 알리고 스레드를 종료함
-	 * 부모는 child->exit_status를 확인하여 실패를 감지함
-	 */
-	sema_up(&current->fork_sema);
-	current->exit_status = TID_ERROR;
-	thread_exit();
+    current->exit_status = TID_ERROR;
+    sema_up(&current->fork_sema);
+    thread_exit();
 }
 
 /* ===== EXEC 시스템 콜 구현 ===== */

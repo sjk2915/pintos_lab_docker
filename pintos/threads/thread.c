@@ -193,8 +193,25 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
-	/* Call the kernel_thread if it scheduled.
-	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
+#ifdef USERPROG
+    /** project2-System Call */
+    // 파일 디스크립터 테이블 할당
+    t->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+    if (t->fdt == NULL) {
+        palloc_free_page(t);  // 스레드 메모리도 해제
+        return TID_ERROR;
+    }
+    
+    t->fd_idx = 3;
+    t->fdt[0] = (struct file *)0;  // stdin 예약된 자리 (dummy)
+    t->fdt[1] = (struct file *)1;  // stdout 예약된 자리 (dummy)  
+    t->fdt[2] = (struct file *)2;  // stderr 예약된 자리 (dummy)
+
+    // 부모-자식 관계 설정 (부모의 child_list에 추가)
+    list_push_back(&thread_current()->child_list, &t->child_elem);
+#endif
+
+	/* Call the kernel_thread if it scheduled. */
 	t->tf.rip = (uintptr_t) kernel_thread;
 	t->tf.R.rdi = (uint64_t) function;
 	t->tf.R.rsi = (uint64_t) aux;
@@ -397,31 +414,138 @@ kernel_thread (thread_func *function, void *aux) {
 
 /* Does basic initialization of T as a blocked thread named
    NAME. */
+/*
+ * 스레드 구조체의 기본 필드들을 초기화함
+ * 
+ * t: 초기화할 스레드 구조체 (이미 할당된 메모리)
+ * name: 스레드 이름 (최대 16바이트)
+ * priority: 초기 우선순위
+ * 
+ * 이 함수는 스레드의 기본적인 속성들을 설정하고,
+ * USERPROG가 활성화된 경우 프로세스 관련 추가 초기화도 수행함
+ */
 static void
 init_thread (struct thread *t, const char *name, int priority) {
+    /* 매개변수 검증 */
     ASSERT (t != NULL);
     ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
     ASSERT (name != NULL);
 
+    /*
+     * 스레드 구조체 전체를 0으로 초기화함
+     * 
+     * 이는 매우 중요한 초기화임. 모든 포인터가 NULL로,
+     * 모든 정수가 0으로 설정되어 예상치 못한 쓰레기 값으로 인한
+     * 버그를 방지함
+     */
     memset (t, 0, sizeof *t);
+    
+    /*
+     * 스레드의 기본 상태를 BLOCKED로 설정함
+     * 
+     * 새로 생성된 스레드는 초기화가 완료될 때까지 실행되면 안되므로
+     * BLOCKED 상태로 시작함. thread_create에서 나중에 thread_unblock을
+     * 호출하여 READY 상태로 변경함
+     */
     t->status = THREAD_BLOCKED;
+    
+    /*
+     * 스레드 이름을 복사함
+     * 
+     * strlcpy: 버퍼 오버플로우를 방지하는 안전한 문자열 복사 함수
+     * 이름이 너무 길면 자동으로 잘림 (최대 15문자 + NULL 종료자)
+     */
     strlcpy (t->name, name, sizeof t->name);
+    
+    /*
+     * 커널 스택 포인터를 설정함
+     * 
+     * 스레드 구조체는 4KB 페이지의 맨 아래쪽에 위치하고,
+     * 나머지 공간은 커널 스택으로 사용됨
+     * 
+     * 계산 과정:
+     * - (uint64_t) t: 페이지의 시작 주소
+     * - + PGSIZE: 페이지의 끝 주소
+     * - - sizeof(void *): 8바이트만큼 뒤로 (스택은 아래쪽으로 자람)
+     * 
+     * 결과적으로 스택은 페이지 맨 위에서 시작해서 아래쪽으로 자람
+     */
     t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
+    
+    /* 우선순위 설정 */
     t->priority = priority;
+    
+    /*
+     * 매직 넘버 설정 (디버깅 및 메모리 오염 검출용)
+     * 
+     * THREAD_MAGIC: 특정한 상수값 (예: 0xcd6abf4b)
+     * 스레드 구조체가 올바르게 초기화되었는지, 메모리 오염이 
+     * 없는지 확인하는 용도로 사용됨
+     */
     t->magic = THREAD_MAGIC;
-    t->exit_status = 0;
 
 #ifdef USERPROG
+    /*
+     * 사용자 프로그램 지원을 위한 추가 초기화
+     * 이 부분이 fork와 exec의 성공에 매우 중요함
+     */
+    
+    /*
+     * 페이지 테이블 초기화
+     * 
+     * NULL로 설정하여 아직 가상 메모리 공간이 설정되지 않았음을 표시
+     * 실제 페이지 테이블은 load() 함수에서 생성됨
+     */
     t->pml4 = NULL;
     
-    /* fd 테이블 초기화 */
-    for (int i = 0; i < FD_MAX; i++) {
-        t->fd_table[i] = NULL;
-    }
-    t->next_fd = 2;
+    /*
+     * 프로세스 종료 상태 초기화
+     * 
+     * 0: 정상 종료 (관례적으로 0은 성공을 의미)
+     * 이 값은 부모가 wait() 시스템 콜을 통해 받게 됨
+     */
+    t->exit_status = 0;
+    
+    /*
+     * 파일 관련 필드들 초기화
+     * 
+     * fdt = NULL: 파일 디스크립터 테이블은 thread_create에서 할당
+     * fd_idx = 3: 다음에 할당할 fd 번호 (0, 1, 2는 표준 입출력용)
+     * runn_file = NULL: 현재 실행 중인 파일 없음
+     */
+    t->fdt = NULL;
+    t->fd_idx = 3;  
+    t->runn_file = NULL;
+    
+    /*
+     * 부모-자식 관계 관리를 위한 리스트 초기화
+     * 
+     * child_list: 이 스레드의 모든 자식들을 추적하는 리스트
+     * wait() 시스템 콜에서 특정 자식을 찾을 때 사용됨
+     */
+    list_init(&t->child_list);
+    
+    /*
+     * 프로세스 동기화를 위한 세마포어들 초기화
+     * 모든 세마포어를 0으로 초기화하여 대기 상태로 시작함
+     * 
+     * fork_sema: fork 과정에서 부모-자식 동기화
+     * - 자식이 초기화를 완료하면 up() 신호
+     * - 부모는 down()으로 자식의 완료를 기다림
+     * 
+     * exit_sema: 프로세스 종료시 동기화 
+     * - 부모가 종료 상태를 수거한 후 up() 신호
+     * - 자식은 down()으로 부모의 수거를 기다림 (좀비 상태)
+     * 
+     * wait_sema: wait 시스템 콜 동기화
+     * - 자식이 종료될 때 up() 신호
+     * - 부모는 down()으로 자식의 종료를 기다림
+     */
+    sema_init(&t->fork_sema, 0);
+    sema_init(&t->exit_sema, 0);
+    sema_init(&t->wait_sema, 0);
 #endif
 }
-
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
