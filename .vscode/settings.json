@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "thread.h": "c",
         "intr-stubs.h": "c",
         "numbers": "c",
         "stdlib.h": "c",
@@ -11,7 +12,6 @@
         "interrupt.h": "c",
         "lib.h": "c",
         "string_view": "c",
-        "thread.h": "c",
         "palloc.h": "c",
         "stdint.h": "c",
         "anon.h": "c",
