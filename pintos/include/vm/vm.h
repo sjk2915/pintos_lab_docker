@@ -44,13 +44,14 @@ struct thread;
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page
 {
+    enum vm_type vm_type;
     const struct page_operations *operations;
     void *va;            /* Address in terms of user space */
     struct frame *frame; /* Back reference for frame */
 
     /* Your implementation */
     struct hash_elem hash_elem;
-
+    bool writable;
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
     union {
@@ -68,6 +69,14 @@ struct frame
 {
     void *kva;
     struct page *page;
+};
+
+struct segment_aux
+{
+    struct file *file;
+    off_t ofs;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
 };
 
 /* The function table for page operations.
@@ -93,7 +102,7 @@ struct page_operations
  * All designs up to you for this. */
 struct supplemental_page_table
 {
-    struct hash *pages;
+    struct hash pages;
 };
 
 struct segment_info
