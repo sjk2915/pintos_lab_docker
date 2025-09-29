@@ -64,8 +64,32 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
          * TODO: uninit_new를 호출하여 "uninit" 페이지 구조체를 생성하세요.
          * TODO: uninit_new를 호출한 후에는 필드를 수정해야 합니다. */
         /* TODO: 페이지를 보조 페이지 테이블(spt)에 삽입하세요. */
-
-        // uninit_new()
+        // 1. 페이지 할당해주자
+        struct page *page = malloc(sizeof(struct page));
+        if (page == NULL)
+            return false;
+        // 2. initializer 찾아주자
+        bool (*initializer)(struct page *, enum vm_type, void *) = NULL;
+        switch (type)
+        {
+        case VM_ANON:
+            initializer = anon_initializer;
+            break;
+        case VM_FILE:
+            initializer = file_backed_initializer;
+            break;
+        default:
+            free(page);
+            goto err;
+        }
+        // 3. uninit_new 호출
+        uninit_new(page, upage, init, type, aux, initializer);
+        // uninit_new 호출 후 필드를 수정 한 후 spt에 삽입 해야한다.
+        // vm_type, writable, frame은 따로 수정
+        page->vm_type = type;
+        page->writable = writable;
+        // page->frame = vm_get_frame();
+        hash_insert(&spt->pages, &page->hash_elem);
     }
 err:
     return false;
@@ -89,7 +113,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED, struct page *pa
     int succ = false;
     /* TODO: Fill this function. */
     // 동일한 elem이 있는지 검색 -> 찾으면 삽입 후 NULL 반환, 이미 있다면 해당 elem반환
-    if (hash_insert(spt->pages, &page->hash_elem) == NULL)
+    if (hash_insert(&spt->pages, &page->hash_elem) == NULL)
         succ = true;
     return succ;
 }
@@ -236,7 +260,7 @@ static bool vm_do_claim_page(struct page *page)
 /* Initialize new supplemental page table */
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 {
-    hash_init(spt->pages, spt_hash_func, spt_less_func, NULL);
+    hash_init(&spt->pages, spt_hash_func, spt_less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
