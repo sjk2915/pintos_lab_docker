@@ -774,7 +774,7 @@ static bool lazy_load_segment(struct page *page, void *aux)
     /* TODO: VA는 이 함수를 호출할 때 사용할 수 있습니다. */
     struct segment_info *info = (struct segment_info *)aux;
     file_read_at(info->file, page->frame->kva, info->read_byte, info->ofs);
-    memset(page->frame->kva, 0, info->zero_byte);
+    memset(page->frame->kva + info->read_byte, 0, info->zero_byte);
     return true;
 }
 
