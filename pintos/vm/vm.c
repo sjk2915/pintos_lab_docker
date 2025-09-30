@@ -243,7 +243,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
     while (hash_next(&i))
     {
         struct page *src_page = hash_entry(hash_cur(&i), struct page, elem);
-        switch (page_get_type(src_page))
+        switch (src_page->operations->type)
         {
         case VM_UNINIT:
             struct segment_info *src_aux = src_page->uninit.aux;
@@ -257,8 +257,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
                 .read_byte = src_aux->read_byte,
                 .zero_byte = src_aux->zero_byte,
             };
-            if (!vm_alloc_page_with_initializer(VM_ANON, src_page->va, src_page->writable,
-                                                src_page->uninit.init, dst_aux))
+            if (!vm_alloc_page_with_initializer(page_get_type(src_page), src_page->va,
+                                                src_page->writable, src_page->uninit.init, dst_aux))
             {
                 free(dst_aux);
                 return false;
@@ -269,7 +269,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
             if (!(vm_alloc_page(VM_ANON, src_page->va, src_page->writable) &&
                   vm_claim_page(src_page->va)))
                 return false;
-            memcpy(spt_find_page(dst, src_page->va)->frame->kva, src_page->frame->kva, PGSIZE);
+            struct page *dst_page = spt_find_page(dst, src_page->va);
+            memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
             break;
 
         case VM_FILE:
