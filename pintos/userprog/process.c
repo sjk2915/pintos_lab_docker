@@ -777,7 +777,6 @@ static bool lazy_load_segment(struct page *page, void *aux)
     off_t read_byte = file_read_at(seg_info->file, upage, seg_info->read_byte, seg_info->ofs);
     memset(upage + read_byte, 0, seg_info->zero_byte);
 
-    file_close(seg_info->file);
     free(aux);
     return true;
 }
@@ -813,12 +812,12 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
         struct segment_info *aux = (struct segment_info *)malloc(sizeof(struct segment_info));
-        aux->file = file_reopen(file);
+        aux->file = file;
         aux->ofs = ofs;
         aux->read_byte = page_read_bytes;
         aux->zero_byte = page_zero_bytes;
 
-        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
+        if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_segment, aux))
             return false;
 
         /* Advance. */
@@ -840,8 +839,11 @@ static bool setup_stack(struct intr_frame *if_)
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
-    success = vm_alloc_page(VM_ANON | VM_STACK, stack_bottom, true) && vm_claim_page(stack_bottom);
-    if_->rsp = USER_STACK;
+    if (vm_alloc_page(VM_ANON | VM_STACK, stack_bottom, true) && vm_claim_page(stack_bottom))
+    {
+        success = true;
+        if_->rsp = USER_STACK;
+    }
 
     return success;
 }
