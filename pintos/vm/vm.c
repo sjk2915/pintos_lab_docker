@@ -124,6 +124,7 @@ static struct frame *vm_get_victim(void)
 {
     struct frame *victim = NULL;
     /* TODO: The policy for eviction is up to you. */
+    PANIC("TODO");
 
     return victim;
 }
@@ -132,10 +133,17 @@ static struct frame *vm_get_victim(void)
  * Return NULL on error.*/
 static struct frame *vm_evict_frame(void)
 {
-    struct frame *victim UNUSED = vm_get_victim();
+    struct frame *victim = vm_get_victim();
     /* TODO: swap out the victim and return the evicted frame. */
+    if (!swap_out(victim->page))
+        PANIC("NO FRAME, NO SWAP SLOT");
 
-    return NULL;
+    pml4_clear_page(thread_current()->pml4, victim->page->va);
+
+    victim->page->frame = NULL;
+    victim->page = NULL;
+
+    return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -147,12 +155,16 @@ static struct frame *vm_get_frame(void)
     /* TODO: Fill this function. */
     struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
     frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
-    // 여기에 할당 실패시 페이지 치우고 다시 할당받는 로직 필요
-    // 현재는 없음
+    if (frame->kva == NULL)
+    {
+        struct frame *victim = vm_evict_frame();
+        ASSERT(victim != NULL);
+
+        frame->kva = victim->kva;
+        free(victim);
+    }
     frame->page = NULL;
 
-    ASSERT(frame != NULL);
-    ASSERT(frame->page == NULL);
     return frame;
 }
 
@@ -178,11 +190,11 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
     struct thread *cur = thread_current();
     struct supplemental_page_table *spt = &cur->spt;
     // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
-    struct page *page = spt_find_page(&spt->pages, addr);
+    struct page *page = spt_find_page(spt, addr);
     if (page == NULL)
     {
         void *rsp = user ? f->rsp : cur->user_rsp;
-        if (addr >= (rsp - 8) && (USER_STACK - (1 << 20)) <= addr && addr < USER_STACK)
+        if (addr >= rsp - 8 && (USER_STACK - (1 << 20)) <= addr && addr < USER_STACK)
             return vm_stack_growth(addr);
 
         return false;
