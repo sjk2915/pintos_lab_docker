@@ -95,6 +95,7 @@ struct page *spt_find_page(struct supplemental_page_table *spt, void *va)
         .va = pg_round_down(va),
     };
     struct hash_elem *to_find = hash_find(&spt->pages, &key.elem);
+
     return to_find == NULL ? NULL : hash_entry(to_find, struct page, elem);
 }
 
@@ -167,7 +168,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
 {
     struct supplemental_page_table *spt = &thread_current()->spt;
     // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
-    struct page *page = spt_find_page(&spt->pages, addr);
+    struct page *page = spt_find_page(spt, addr);
 
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
@@ -202,8 +203,10 @@ bool vm_claim_page(void *va)
 {
     /* TODO: Fill this function */
     struct page *page = spt_find_page(&thread_current()->spt, va);
+
     if (page == NULL)
         return false;
+
     return vm_do_claim_page(page);
 }
 
