@@ -101,6 +101,7 @@ struct page *spt_find_page(struct supplemental_page_table *spt, void *va)
         .va = pg_round_down(va),
     };
     struct hash_elem *to_find = hash_find(&spt->pages, &key.elem);
+
     return to_find == NULL ? NULL : hash_entry(to_find, struct page, elem);
 }
 
@@ -169,9 +170,10 @@ static struct frame *vm_get_frame(void)
 }
 
 /* Growing the stack. */
-static bool vm_stack_growth(void *addr)
+static void vm_stack_growth(void *addr)
 {
-    return vm_alloc_page(VM_ANON | VM_STACK, pg_round_down(addr), true) && vm_claim_page(addr);
+    vm_alloc_page(VM_ANON, pg_round_down(addr), true);
+    vm_claim_page(addr);
 }
 
 /* Handle the fault on write_protected page */
@@ -193,10 +195,11 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
     struct page *page = spt_find_page(spt, addr);
     if (page == NULL)
     {
-        void *rsp = user ? f->rsp : cur->user_rsp;
-        if (addr >= rsp - 8 && (USER_STACK - (1 << 20)) <= addr && addr < USER_STACK)
-            return vm_stack_growth(addr);
-
+        if (addr >= f->rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        {
+            vm_stack_growth(addr);
+            return true;
+        }
         return false;
     }
 
@@ -216,8 +219,10 @@ bool vm_claim_page(void *va)
 {
     /* TODO: Fill this function */
     struct page *page = spt_find_page(&thread_current()->spt, va);
+
     if (page == NULL)
         return false;
+
     return vm_do_claim_page(page);
 }
 
