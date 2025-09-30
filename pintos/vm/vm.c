@@ -157,10 +157,9 @@ static struct frame *vm_get_frame(void)
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr)
+static bool vm_stack_growth(void *addr)
 {
-    vm_alloc_page(VM_ANON, addr, true);
-    vm_claim_page(addr);
+    return vm_alloc_page(VM_ANON | VM_STACK, pg_round_down(addr), true) && vm_claim_page(addr);
 }
 
 /* Handle the fault on write_protected page */
@@ -171,28 +170,25 @@ static bool vm_handle_wp(struct page *page UNUSED)
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present)
 {
-    struct supplemental_page_table *spt = &thread_current()->spt;
-    // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
-    struct page *page = spt_find_page(&spt->pages, addr);
-
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
-    if (!not_present || is_kernel_vaddr(addr))
-    {
+    if (!not_present || addr == NULL || is_kernel_vaddr(addr))
         return false;
-    }
 
+    struct thread *cur = thread_current();
+    struct supplemental_page_table *spt = &cur->spt;
+    // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
+    struct page *page = spt_find_page(&spt->pages, addr);
     if (page == NULL)
     {
-        if (addr >= f->rsp && (USER_STACK - (1 << 20)) <= addr && addr < USER_STACK)
-        {
-            vm_stack_growth(addr);
-            return true;
-        }
+        void *rsp = user ? f->rsp : cur->user_rsp;
+        if (addr >= (rsp - 8) && (USER_STACK - (1 << 20)) <= addr && addr < USER_STACK)
+            return vm_stack_growth(addr);
+
         return false;
     }
 
-    return false;
+    return vm_do_claim_page(page);
 }
 
 /* Free the page.
