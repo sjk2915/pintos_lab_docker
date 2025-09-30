@@ -769,9 +769,13 @@ static bool install_page(void *upage, void *kpage, bool writable)
 
 static bool lazy_load_segment(struct page *page, void *aux)
 {
-    /* TODO: Load the segment from the file */
-    /* TODO: This called when the first page fault occurs on address VA. */
-    /* TODO: VA is available when calling this function. */
+    /* TODO: 파일에서 세그먼트를 로드하세요 */
+    /* TODO: 이 함수는 VA 주소에서 첫 번째 페이지 폴트가 발생했을 때 호출됩니다. */
+    /* TODO: VA는 이 함수를 호출할 때 사용할 수 있습니다. */
+    struct segment_info *info = (struct segment_info *)aux;
+    file_read_at(info->file, page->frame->kva, info->read_byte, info->ofs);
+    memset(page->frame->kva, 0, info->zero_byte);
+    return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -804,7 +808,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
-        struct segment_info *aux;
+        struct segment_info *aux = (struct segment_info *)malloc(sizeof(struct segment_info));
         aux->file = file;
         aux->ofs = ofs;
         aux->read_byte = page_read_bytes;
@@ -823,6 +827,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
+
+/* USER_STACK에 스택 PAGE를 생성합니다. 성공하면 true를 반환합니다. */
 static bool setup_stack(struct intr_frame *if_)
 {
     bool success = false;
@@ -833,7 +839,8 @@ static bool setup_stack(struct intr_frame *if_)
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
     vm_alloc_page(VM_ANON, stack_bottom, true);
-    vm_claim_page(stack_bottom);
+    if (vm_claim_page(stack_bottom))
+        success = true;
     if_->rsp = USER_STACK;
 
     return success;
