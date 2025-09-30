@@ -154,7 +154,7 @@ static struct frame *vm_get_frame(void)
 // 스택 확장이 필요할 때 호출되어, 폴트가 발생한 주소(addr)에 새로운 스택 페이지를 할당
 static void vm_stack_growth(void *addr)
 {
-    vm_alloc_page(VM_ANON, addr, true);
+    vm_alloc_page(VM_ANON, pg_round_down(addr), true);
     vm_claim_page(addr);
 }
 
@@ -189,7 +189,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
         /* 스택 확장 조건 검사: 폴트 주소 addr가 현재 스택 포인터(f->rsp)보다 아래에 있고,
          * USER_STACK으로부터 일정 범위(KAIST Pintos에서는 보통 1MB) 내에 있는지 확인.
          * 이 조건을 만족하면 유효한 스택 확장 시도로 간주 */
-        if (addr >= f->rsp && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        if ((addr >= (f->rsp - 8)) && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
         {
             vm_stack_growth(addr);
             return true;

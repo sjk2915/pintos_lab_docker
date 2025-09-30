@@ -127,9 +127,9 @@ void syscall_handler(struct intr_frame *f)
 
 static void check_ptr(void *ptr)
 {
-    if (ptr == NULL                                            // null 포인터
-        || is_kernel_vaddr(ptr)                                // 커널 메모리 침범
-        || pml4_get_page(thread_current()->pml4, ptr) == NULL) // 매핑안됨
+    if (ptr == NULL              // null 포인터
+        || is_kernel_vaddr(ptr)) // 커널 메모리 침범
+        // || pml4_get_page(thread_current()->pml4, ptr) == NULL)
         sys_exit(-1);
 }
 

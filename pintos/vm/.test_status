@@ -80,7 +80,7 @@ pt-grow-bad PASS
 mmap-twice FAIL
 pt-grow-stk-sc FAIL
 exec-read FAIL
-read-boundary FAIL
+read-boundary PASS
 priority-sema PASS
 wait-twice FAIL
 exec-boundary FAIL
@@ -98,7 +98,7 @@ fork-recursive FAIL
 open-bad-ptr PASS
 mmap-inherit FAIL
 mmap-unmap FAIL
-write-normal FAIL
+write-normal PASS
 mmap-off FAIL
 mmap-over-code FAIL
 mmap-close FAIL
