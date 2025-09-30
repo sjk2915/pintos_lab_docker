@@ -27,7 +27,7 @@ create-bad-ptr PASS
 read-stdout PASS
 wait-bad-pid PASS
 exec-read FAIL
-read-boundary FAIL
+read-boundary PASS
 wait-twice FAIL
 exec-boundary FAIL
 close-normal PASS

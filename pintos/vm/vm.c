@@ -154,7 +154,7 @@ static struct frame *vm_get_frame(void)
 /* Growing the stack. */
 static void vm_stack_growth(void *addr)
 {
-    vm_alloc_page(VM_ANON, addr, true);
+    vm_alloc_page(VM_ANON, pg_round_down(addr), true);
     vm_claim_page(addr);
 }
 
@@ -179,7 +179,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
 
     if (page == NULL)
     {
-        if (addr >= f->rsp && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        if (addr >= f->rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
         {
             vm_stack_growth(addr);
             return true;

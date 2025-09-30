@@ -769,11 +769,6 @@ static bool install_page(void *upage, void *kpage, bool writable)
 
 static bool lazy_load_segment(struct page *page, void *aux)
 {
-    // struct segment_info *info = (struct segment_info *)aux;
-    // file_read_at(info->file, page->frame->kva, info->read_byte, info->ofs);
-    // memset(page->frame->kva + info->read_byte, 0, info->zero_byte);
-    // return true;
-
     /* TODO: Load the segment from the file */
 
     struct segment_info *p_aux = aux;
@@ -849,7 +844,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         aux->read_byte = page_read_bytes;
         aux->zero_byte = page_zero_bytes;
 
-        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
+        if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_segment, aux))
         {
             return false;
         }
