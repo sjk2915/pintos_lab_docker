@@ -151,6 +151,7 @@ static struct frame *vm_get_frame(void)
 }
 
 /* Growing the stack. */
+// 스택 확장이 필요할 때 호출되어, 폴트가 발생한 주소(addr)에 새로운 스택 페이지를 할당
 static void vm_stack_growth(void *addr)
 {
     // addr을 PGSIZE에 맞게 내림(round down)
@@ -166,6 +167,7 @@ static bool vm_handle_wp(struct page *page UNUSED)
 }
 
 /* Return true on success */
+// page_fault 핸들러의 일부로, 발생한 페이지 폴트가 유효한지를 검사하고 처리하는 역할
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present)
 {
     uintptr_t rsp = user ? f->rsp : thread_current()->user_rsp;
@@ -174,11 +176,17 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
     struct page *page = spt_find_page(spt, addr);
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
+    /* 유효성 검증 1.
+     * !not_present : not_present가 false라는 것은 페이지가 메모리에 있지만 권한이 없는 접근(e.g.
+     * 읽기 전용 페이지에 쓰기 시도)을 했다는 의미
+     * is_kernel_vaddr(addr): 폴트 주소가 커널 영역인 경우, 이는 커널 버그 */
     if (!not_present || is_kernel_vaddr(addr))
     {
         return false;
     }
 
+    // 페이지가 SPT에 없는 경우: page가 NULL이라는 것은 SPT에 해당 주소에 대한 정보가 없다는 의미
+    // => 이 경우, 유일하게 허용되는 상황은 스택 확장
     if (page == NULL)
     {
         if (addr >= rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
@@ -189,6 +197,8 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
         return false;
     }
 
+    // 페이지가 SPT에 있는 경우: page를 찾았다면, 이는 load_segment 등에서 지연 로딩을 위해 미리
+    // 설정해 둔 페이지 => vm_do_claim_page()를 호출하여 물리 프레임을 할당
     return vm_do_claim_page(page);
 }
 

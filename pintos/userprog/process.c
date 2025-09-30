@@ -825,15 +825,22 @@ static bool lazy_load_segment(struct page *page, void *_aux)
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable)
 {
+    // load_segment가 처리할 총 바이트 수가 페이지 크기의 배수인지 확인
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+    // 시작 가상 주소(upage)와 파일에서의 오프셋(ofs)이 페이지 경계에 맞춰 정렬되어 있는지 확인
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
 
+    // 해당 세그먼트를 페이지 단위로 하나씩 처리(read_bytes나 zero_bytes가 남아있는 동안 계속 반복)
     while (read_bytes > 0 || zero_bytes > 0)
     {
         /* Do calculate how to fill this page.
          * We will read PAGE_READ_BYTES bytes from FILE
          * and zero the final PAGE_ZERO_BYTES bytes. */
+        // 페이지 내 채울 바이트 계산
+        // page_read_bytes: 파일에서 읽어올 바이트 수
+        // page_zero_bytes: 0으로 채워야 할 바이트 수, 한 페이지 내에서 파일로부터 읽은 부분을
+        // 제외한 나머지 영역
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
