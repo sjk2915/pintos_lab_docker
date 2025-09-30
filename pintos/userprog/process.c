@@ -801,20 +801,30 @@ static bool lazy_load_segment(struct page *page, void *_aux)
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable)
 {
+    // load_segment가 처리할 총 바이트 수가 페이지 크기의 배수인지 확인
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+    // 시작 가상 주소(upage)와 파일에서의 오프셋(ofs)이 페이지 경계에 맞춰 정렬되어 있는지 확인
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
 
+    // 해당 세그먼트를 페이지 단위로 하나씩 처리(read_bytes나 zero_bytes가 남아있는 동안 계속 반복)
     while (read_bytes > 0 || zero_bytes > 0)
     {
         /* Do calculate how to fill this page.
          * We will read PAGE_READ_BYTES bytes from FILE
          * and zero the final PAGE_ZERO_BYTES bytes. */
+        // 페이지 내 채울 바이트 계산
+        // page_read_bytes: 파일에서 읽어올 바이트 수
+        // page_zero_bytes: 0으로 채워야 할 바이트 수, 한 페이지 내에서 파일로부터 읽은 부분을
+        // 제외한 나머지 영역
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
-        struct segment_info *aux;
+        /* 나중에 페이지 폴트가 발생했을 때 lazy_load_segment 함수가 호출되는데,
+         * 이때 어떤 파일의 어느 위치에서 얼마만큼 읽어야 하는지에 대한 정보가 필요하고,
+         * 이 정보를 aux라는 보조 데이터 구조체에 담아 전달 */
+        struct segment_info *aux = (struct segment_info *)malloc(sizeof(struct segment_info));
         aux->file = file;
         aux->ofs = ofs;
         aux->read_byte = page_read_bytes;
@@ -842,9 +852,12 @@ static bool setup_stack(struct intr_frame *if_)
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
-    vm_alloc_page(VM_ANON, stack_bottom, true);
-    vm_claim_page(stack_bottom);
-    if_->rsp = USER_STACK;
+    // 스택 할당 및 선점이 성공하면 success를 true로 바꿔주고 스택 포인터 설정
+    if (vm_alloc_page(VM_ANON, stack_bottom, true) && vm_claim_page(stack_bottom))
+    {
+        success = true;
+        if_->rsp = USER_STACK;
+    }
 
     return success;
 }
