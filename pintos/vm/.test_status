@@ -1,4 +1,4 @@
-exec-bad-ptr PASS
+exec-bad-ptr FAIL
 swap-iter FAIL
 sm-full PASS
 rox-simple PASS
@@ -29,7 +29,7 @@ page-shuffle PASS
 exec-arg FAIL
 exec-missing PASS
 page-merge-mm FAIL
-read-bad-ptr PASS
+read-bad-ptr FAIL
 create-long PASS
 mmap-remove FAIL
 mmap-read FAIL
@@ -71,7 +71,7 @@ mmap-over-data FAIL
 args-none PASS
 mmap-kernel FAIL
 swap-fork FAIL
-create-bad-ptr PASS
+create-bad-ptr FAIL
 read-stdout PASS
 priority-fifo PASS
 wait-bad-pid PASS
@@ -95,7 +95,7 @@ open-boundary PASS
 create-null PASS
 pt-grow-stack FAIL
 fork-recursive FAIL
-open-bad-ptr PASS
+open-bad-ptr FAIL
 mmap-inherit FAIL
 mmap-unmap FAIL
 write-normal PASS
@@ -115,7 +115,7 @@ close-bad-fd PASS
 alarm-negative PASS
 multi-child-fd FAIL
 exit PASS
-write-bad-ptr PASS
+write-bad-ptr FAIL
 priority-donate-sema PASS
 lg-seq-block PASS
 mmap-shuffle FAIL
