@@ -859,6 +859,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
+
+/* USER_STACK에 스택 PAGE를 생성합니다. 성공하면 true를 반환합니다. */
 static bool setup_stack(struct intr_frame *if_)
 {
     bool success = false;
