@@ -775,7 +775,7 @@ static bool lazy_load_segment(struct page *page, void *aux)
 
     /* TODO: This called when the first page fault occurs on address VA. */
 
-    int8_t *p_kva = (int8_t *)page->frame->kva; // 물리 프레임의 커널 주소
+    void *p_kva = page->frame->kva; // 물리 프레임의 커널 주소
 
     size_t page_read_byte = p_aux->read_byte; // 읽을 바이트 수
     size_t page_zero_byte = p_aux->zero_byte; // 제로 바이트 수
