@@ -812,8 +812,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
-        struct segment_info *aux;
-        aux->file = file;
+        struct segment_info *aux = (struct segment_info *)malloc(sizeof(struct segment_info));
+        aux->file = file_reopen(file);
         aux->ofs = ofs;
         aux->read_byte = page_read_bytes;
         aux->zero_byte = page_zero_bytes;
@@ -833,16 +833,16 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool setup_stack(struct intr_frame *if_)
 {
-    bool succ = false;
+    bool success = false;
     void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
     /* TODO: Map the stack on stack_bottom and claim the page immediately.
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
-    succ = vm_alloc_page(VM_ANON | VM_STACK, stack_bottom, true) && vm_claim_page(stack_bottom);
+    success = vm_alloc_page(VM_ANON | VM_STACK, stack_bottom, true) && vm_claim_page(stack_bottom);
     if_->rsp = USER_STACK;
 
-    return succ;
+    return success;
 }
 #endif /* VM */
