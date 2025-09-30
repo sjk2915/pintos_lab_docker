@@ -119,9 +119,6 @@ static void kill(struct intr_frame *f)
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void page_fault(struct intr_frame *f)
 {
-    if (f->cs == SEL_UCSEG)
-        thread_current()->user_rsp = f->rsp;
-
     bool not_present; /* True: not-present page, false: writing r/o page. */
     bool write;       /* True: access was write, false: access was read. */
     bool user;        /* True: access by user, false: access by kernel. */
@@ -151,6 +148,15 @@ static void page_fault(struct intr_frame *f)
 
     /* Count page faults. */
     page_fault_cnt++;
+
+    // 커널에서 유저주소 접근중 난 fault -> 유저잘못 강종
+    if (!user && is_user_vaddr(fault_addr))
+    {
+        struct thread *cur = thread_current();
+        cur->exit_status = -1;
+        printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+        thread_exit();
+    }
 
     /* If the fault is true fault, show info and exit. */
     printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
