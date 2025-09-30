@@ -42,10 +42,10 @@ void uninit_new(struct page *page, void *va, vm_initializer *init, enum vm_type 
 /* Initalize the page on first fault */
 static bool uninit_initialize(struct page *page, void *kva)
 {
-    struct uninit_page *uninit = &page->uninit;
+    struct uninit_page *uninit = &page->uninit; // page에 저장해놓은 uninit을 꺼냄
 
     /* Fetch first, page_initialize may overwrite the values */
-    vm_initializer *init = uninit->init;
+    vm_initializer *init = uninit->init; // lazy_load_segment
     void *aux = uninit->aux;
 
     /* TODO: You may need to fix this function. */
