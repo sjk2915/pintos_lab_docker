@@ -71,6 +71,8 @@ void syscall_init(void)
 void syscall_handler(struct intr_frame *f)
 {
     // TODO: Your implementation goes here.
+    struct thread *t = thread_current();
+    t->usr_rsp = f->rsp;
     switch (f->R.rax)
     {
     case SYS_HALT:
