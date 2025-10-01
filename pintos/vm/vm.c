@@ -95,7 +95,6 @@ struct page *spt_find_page(struct supplemental_page_table *spt, void *va)
         .va = pg_round_down(va),
     };
     struct hash_elem *to_find = hash_find(&spt->pages, &key.elem);
-
     return to_find == NULL ? NULL : hash_entry(to_find, struct page, elem);
 }
 
@@ -154,6 +153,9 @@ static struct frame *vm_get_frame(void)
 /* Growing the stack. */
 static void vm_stack_growth(void *addr)
 {
+    // addr을 PGSIZE에 맞게 내림(round down)
+    // void *stack_bottom = pg_round_down(addr);
+    // 익명 페이지(anonymous pages)를 할당
     vm_alloc_page(VM_ANON, pg_round_down(addr), true);
     vm_claim_page(addr);
 }
@@ -166,10 +168,10 @@ static bool vm_handle_wp(struct page *page UNUSED)
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present)
 {
+    uintptr_t rsp = user ? f->rsp : thread_current()->user_rsp;
     struct supplemental_page_table *spt = &thread_current()->spt;
     // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
     struct page *page = spt_find_page(spt, addr);
-
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
     if (!not_present || is_kernel_vaddr(addr))
@@ -179,7 +181,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
 
     if (page == NULL)
     {
-        if (addr >= f->rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        if (addr >= rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
         {
             vm_stack_growth(addr);
             return true;
@@ -203,10 +205,8 @@ bool vm_claim_page(void *va)
 {
     /* TODO: Fill this function */
     struct page *page = spt_find_page(&thread_current()->spt, va);
-
     if (page == NULL)
         return false;
-
     return vm_do_claim_page(page);
 }
 
@@ -220,7 +220,8 @@ static bool vm_do_claim_page(struct page *page)
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-    pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
+    if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
+        return false;
 
     return swap_in(page, frame->kva);
 }

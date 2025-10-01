@@ -70,6 +70,8 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f)
 {
+    // user_rsp 저장
+    thread_current()->user_rsp = f->rsp;
     // TODO: Your implementation goes here.
     switch (f->R.rax)
     {
@@ -259,6 +261,11 @@ static int sys_filesize(int fd)
 static int sys_read(int fd, void *buffer, unsigned size)
 {
     check_ptr(buffer);
+    struct page *page = spt_find_page(&thread_current()->spt, buffer);
+    if (page && !page->writable)
+    {
+        sys_exit(-1);
+    }
     struct thread *cur = thread_current();
     if (check_fd(cur, fd) == -1)
         return -1;
