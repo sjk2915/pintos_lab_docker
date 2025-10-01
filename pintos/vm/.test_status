@@ -1,10 +1,14 @@
-exec-bad-ptr PASS
+exec-bad-ptr FAIL
+sm-full PASS
 rox-simple PASS
 fork-multiple FAIL
 pt-write-code PASS
 args-dbl-space PASS
 read-bad-fd PASS
 args-multiple PASS
+lg-seq-random PASS
+syn-write FAIL
+syn-remove PASS
 create-normal PASS
 bad-write PASS
 open-twice PASS
@@ -23,7 +27,9 @@ read-normal PASS
 pt-write-code2 PASS
 open-empty PASS
 open-null PASS
+sm-seq-random PASS
 bad-write2 PASS
+sm-seq-block PASS
 multi-recurse FAIL
 close-twice PASS
 args-none PASS
@@ -37,8 +43,10 @@ read-boundary PASS
 wait-twice FAIL
 exec-boundary FAIL
 close-normal PASS
+sm-create PASS
 halt PASS
 write-bad-fd PASS
+sm-random PASS
 open-boundary PASS
 create-null PASS
 pt-grow-stack PASS
@@ -49,10 +57,12 @@ bad-read PASS
 fork-once FAIL
 write-boundary PASS
 wait-killed FAIL
+lg-full PASS
 close-bad-fd PASS
 multi-child-fd FAIL
 exit PASS
 write-bad-ptr PASS
+lg-seq-block PASS
 wait-simple FAIL
 exec-once FAIL
 args-many PASS
@@ -69,3 +79,4 @@ args-single PASS
 write-stdin PASS
 read-zero PASS
 bad-read2 PASS
+syn-read FAIL
