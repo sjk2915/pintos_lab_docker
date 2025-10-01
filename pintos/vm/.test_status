@@ -22,6 +22,7 @@ rox-multichild FAIL
 lg-random PASS
 rox-child FAIL
 read-normal PASS
+pt-write-code2 PASS
 open-empty PASS
 open-null PASS
 sm-seq-random PASS
@@ -34,6 +35,7 @@ create-bad-ptr PASS
 read-stdout PASS
 wait-bad-pid PASS
 lg-create PASS
+pt-grow-stk-sc PASS
 exec-read FAIL
 read-boundary PASS
 wait-twice FAIL
