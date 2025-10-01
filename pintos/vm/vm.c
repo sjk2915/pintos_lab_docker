@@ -172,7 +172,7 @@ static struct frame *vm_get_frame(void)
 /* Growing the stack. */
 static void vm_stack_growth(void *addr)
 {
-    vm_alloc_page(VM_ANON, pg_round_down(addr), true);
+    vm_alloc_page(VM_ANON | VM_STACK, pg_round_down(addr), true);
     vm_claim_page(addr);
 }
 
@@ -195,7 +195,8 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
     struct page *page = spt_find_page(spt, addr);
     if (page == NULL)
     {
-        if (addr >= f->rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        void *rsp = user ? f->rsp : cur->user_rsp;
+        if (addr >= f->rsp - 8 && (USER_STACK - (1 << 20)) < addr && addr < USER_STACK)
         {
             vm_stack_growth(addr);
             return true;
@@ -256,6 +257,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
     while (hash_next(&i))
     {
         struct page *src_page = hash_entry(hash_cur(&i), struct page, elem);
+        struct page *dst_page;
         switch (src_page->operations->type)
         {
         case VM_UNINIT:
@@ -282,11 +284,16 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
             if (!(vm_alloc_page(VM_ANON, src_page->va, src_page->writable) &&
                   vm_claim_page(src_page->va)))
                 return false;
-            struct page *dst_page = spt_find_page(dst, src_page->va);
+            dst_page = spt_find_page(dst, src_page->va);
             memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
             break;
 
         case VM_FILE:
+            if (!(vm_alloc_page(VM_FILE, src_page->va, src_page->writable) &&
+                  vm_claim_page(src_page->va)))
+                return false;
+            dst_page = spt_find_page(dst, src_page->va);
+            memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
             break;
 
         default:
