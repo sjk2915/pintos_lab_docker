@@ -70,6 +70,8 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f)
 {
+    // user_rsp 저장
+    thread_current()->user_rsp = f->rsp;
     // TODO: Your implementation goes here.
     switch (f->R.rax)
     {
