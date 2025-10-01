@@ -148,16 +148,18 @@ static void page_fault(struct intr_frame *f)
 
     /* Count page faults. */
     page_fault_cnt++;
-
-    // 커널에서 유저주소 접근중 난 fault -> 유저잘못 강종
-    if (!user && is_user_vaddr(fault_addr))
+    // 커널영역에서 실패 했을 경우 thread_exit()
+    if (!user)
     {
-        struct thread *cur = thread_current();
-        cur->exit_status = -1;
-        printf("%s: exit(%d)\n", cur->name, cur->exit_status);
-        thread_exit();
+        if (is_user_vaddr(fault_addr))
+        {
+            struct thread *cur = thread_current();
+            f->rsp = cur->user_rsp;
+            cur->exit_status = -1;
+            printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+            thread_exit();
+        }
     }
-
     /* If the fault is true fault, show info and exit. */
     printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
            not_present ? "not present" : "rights violation", write ? "writing" : "reading",

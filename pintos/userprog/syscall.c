@@ -75,6 +75,8 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f)
 {
+    // user_rsp 저장
+    thread_current()->user_rsp = f->rsp;
     // TODO: Your implementation goes here.
     thread_current()->user_rsp = f->rsp;
 
@@ -274,6 +276,11 @@ static int sys_filesize(int fd)
 static int sys_read(int fd, void *buffer, unsigned size)
 {
     check_ptr(buffer);
+    struct page *page = spt_find_page(&thread_current()->spt, buffer);
+    if (page && !page->writable)
+    {
+        sys_exit(-1);
+    }
     struct thread *cur = thread_current();
     // 버퍼 검증
     struct page *page = spt_find_page(&cur->spt, buffer);
