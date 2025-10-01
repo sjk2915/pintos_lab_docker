@@ -145,15 +145,16 @@ static void page_fault(struct intr_frame *f)
     if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
         return;
 #endif
-
-    if (is_user_vaddr(fault_addr))
+    if (!user)
     {
-        struct thread *cur = thread_current();
-        cur->exit_status = -1;
-        printf("%s: exit(%d)\n", cur->name, cur->exit_status);
-        thread_exit();
+        if (is_user_vaddr(fault_addr))
+        {
+            struct thread *cur = thread_current();
+            cur->exit_status = -1;
+            printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+            thread_exit();
+        }
     }
-
     /* Count page faults. */
     page_fault_cnt++;
     // 커널영역에서 실패 했을 경우 thread_exit()
