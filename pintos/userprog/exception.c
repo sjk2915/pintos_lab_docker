@@ -154,6 +154,7 @@ static void page_fault(struct intr_frame *f)
         if (is_user_vaddr(fault_addr))
         {
             struct thread *cur = thread_current();
+            f->rsp = cur->user_rsp;
             cur->exit_status = -1;
             printf("%s: exit(%d)\n", cur->name, cur->exit_status);
             thread_exit();

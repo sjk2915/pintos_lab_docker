@@ -20,7 +20,7 @@ pt-bad-read PASS
 rox-child FAIL
 pt-bad-addr PASS
 read-normal PASS
-pt-write-code2 FAIL
+pt-write-code2 PASS
 open-empty PASS
 open-null PASS
 bad-write2 PASS
@@ -31,9 +31,9 @@ create-bad-ptr PASS
 read-stdout PASS
 wait-bad-pid PASS
 pt-grow-bad PASS
-pt-grow-stk-sc FAIL
+pt-grow-stk-sc PASS
 exec-read FAIL
-read-boundary FAIL
+read-boundary PASS
 wait-twice FAIL
 exec-boundary FAIL
 close-normal PASS

@@ -168,8 +168,7 @@ static bool vm_handle_wp(struct page *page UNUSED)
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present)
 {
-    if (!user && is_user_vaddr(addr))
-        f->rsp = thread_current()->user_rsp;
+    uintptr_t rsp = user ? f->rsp : thread_current()->user_rsp;
     struct supplemental_page_table *spt = &thread_current()->spt;
     // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
     struct page *page = spt_find_page(spt, addr);
@@ -182,7 +181,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
 
     if (page == NULL)
     {
-        if (addr >= f->rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        if (addr >= rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
         {
             vm_stack_growth(addr);
             return true;
