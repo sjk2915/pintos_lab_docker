@@ -196,7 +196,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
     if (page == NULL)
     {
         void *rsp = user ? f->rsp : cur->user_rsp;
-        if (addr >= f->rsp - 8 && (USER_STACK - (1 << 20)) < addr && addr < USER_STACK)
+        if (addr >= rsp - 8 && (USER_STACK - (1 << 20)) < addr && addr < USER_STACK)
         {
             vm_stack_growth(addr);
             return true;
