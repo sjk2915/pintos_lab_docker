@@ -166,9 +166,16 @@ static bool vm_handle_wp(struct page *page UNUSED)
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present)
 {
-    struct supplemental_page_table *spt = &thread_current()->spt;
+    struct thread *t = thread_current();
+    uintptr_t rsp;
+    struct supplemental_page_table *spt = &t->spt;
     // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
     struct page *page = spt_find_page(spt, addr);
+
+    /* 유저 모드에서 폴트 발생 시 유저 rsp가 f에 그대로 담겨있음.
+     * 커널 모드에서 폴트 발생 시 f가 커널 정보를 담고 있으므로 사용하면 안됨.
+     * => syscall에서 미리 저장해 둔 유저 rsp 사용 */
+    rsp = user ? f->rsp : t->usr_rsp;
 
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
@@ -179,7 +186,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
 
     if (page == NULL)
     {
-        if (addr >= f->rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
+        if (addr >= rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
         {
             vm_stack_growth(addr);
             return true;
