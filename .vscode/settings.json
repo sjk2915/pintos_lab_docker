@@ -18,8 +18,7 @@
         "page_cache.h": "c",
         "mmu.h": "c",
         "pte.h": "c",
-        "*.inc": "c",
-        "intrinsic.h": "c"
+        "*.inc": "c"
     },
     "files.eol": "\n"
 }
