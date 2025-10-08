@@ -117,6 +117,7 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page);
 
 uint64_t spt_hash_func(const struct hash_elem *e, void *aux);
 bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
+void spt_destroy_func(struct hash_elem *e, void *aux);
 
 void vm_init(void);
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present);
