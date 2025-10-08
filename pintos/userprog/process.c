@@ -281,6 +281,7 @@ int process_exec(void *f_name)
          token = strtok_r(NULL, " ", &save_ptr))
         argv[argc++] = token;
 
+    supplemental_page_table_init(&thread_current()->spt);
     /* And then load the binary */
     success = load(argc, argv, &_if);
 
@@ -846,7 +847,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
         if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_segment, aux))
         {
-            file_close(file);
+            file_close(aux->file);
             free(aux);
             return false;
         }

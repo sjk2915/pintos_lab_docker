@@ -18,7 +18,15 @@
         "page_cache.h": "c",
         "mmu.h": "c",
         "pte.h": "c",
-        "*.inc": "c"
+        "*.inc": "c",
+        "hash.h": "c",
+        "array": "c",
+        "deque": "c",
+        "string": "c",
+        "vector": "c",
+        "memory_resource": "c",
+        "functional": "c",
+        "malloc.h": "c"
     },
     "files.eol": "\n"
 }

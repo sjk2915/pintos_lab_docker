@@ -4,6 +4,7 @@
 #include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include <string.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -233,9 +234,73 @@ void supplemental_page_table_init(struct supplemental_page_table *spt)
 }
 
 /* Copy supplemental page table from src to dst */
-bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED)
+bool supplemental_page_table_copy(struct supplemental_page_table *dst,
+                                  struct supplemental_page_table *src)
 {
+    struct hash_iterator i;
+    hash_first(&i, &src->pages);
+    while (hash_next(&i))
+    {
+        struct page *parent_page = hash_entry(hash_cur(&i), struct page, elem);
+        if (parent_page->frame == NULL) // 프레임이 없다는건 부모가 아직 uninit 상태라는 뜻(claim x)
+        {
+            vm_initializer *init_fn = parent_page->uninit.init;
+            enum vm_type t = VM_TYPE(parent_page->uninit.type);
+            switch (t)
+            {
+            case VM_FILE: {
+                struct segment_info *parent_aux = parent_page->uninit.aux;
+                struct segment_info *child_aux =
+                    (struct segment_info *)malloc(sizeof(struct segment_info));
+                child_aux->file = file_reopen(parent_aux->file);
+                child_aux->ofs = parent_aux->ofs;
+                child_aux->read_byte = parent_aux->read_byte;
+                child_aux->zero_byte = parent_aux->zero_byte;
+                if (!vm_alloc_page_with_initializer(t, parent_page->va, parent_page->writable,
+                                                    init_fn, child_aux))
+                {
+                    file_close(child_aux->file);
+                    free(child_aux);
+                    goto err;
+                }
+                break;
+            }
+            case VM_ANON: {
+                if (!vm_alloc_page_with_initializer(t, parent_page->va, parent_page->writable, NULL,
+                                                    NULL))
+                {
+                    goto err;
+                }
+                break;
+            }
+            default: {
+                goto err;
+            }
+            }
+            if (!vm_claim_page(parent_page->va))
+            {
+                goto err;
+            }
+        }
+        else
+        {
+            enum vm_type t = VM_TYPE(parent_page->operations->type);
+            if (!vm_alloc_page_with_initializer(VM_ANON, parent_page->va, parent_page->writable,
+                                                NULL, NULL))
+            {
+                goto err;
+            }
+            if (!vm_claim_page(parent_page->va))
+            {
+                goto err;
+            }
+            struct page *child_page = spt_find_page(dst, parent_page->va);
+            memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
+        }
+    }
+    return true;
+err:
+    return false;
 }
 
 /* Free the resource hold by the supplemental page table */
