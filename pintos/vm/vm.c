@@ -257,3 +257,9 @@ bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *a
     struct page *pb = hash_entry(b, struct page, elem);
     return pa->va < pb->va;
 }
+
+void spt_destroy_func(struct hash_elem *e, void *aux)
+{
+    struct page *p = hash_entry(e, struct page, elem);
+    vm_dealloc_page(p);
+}
