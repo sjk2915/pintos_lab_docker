@@ -14,7 +14,7 @@ struct uninit_page
     /* Initiate the contets of the page */
     vm_initializer *init;
     enum vm_type type;
-    void *aux;
+    struct segment_info *aux;
     /* Initiate the struct page and maps the pa to the va */
     bool (*page_initializer)(struct page *, enum vm_type, void *kva);
 };

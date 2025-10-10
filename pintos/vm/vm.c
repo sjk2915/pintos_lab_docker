@@ -4,6 +4,7 @@
 #include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include <string.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -233,16 +234,67 @@ void supplemental_page_table_init(struct supplemental_page_table *spt)
 }
 
 /* Copy supplemental page table from src to dst */
-bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED)
+bool supplemental_page_table_copy(struct supplemental_page_table *dst,
+                                  struct supplemental_page_table *src)
 {
+    struct hash_iterator i;
+    hash_first(&i, &src->pages);
+    while (hash_next(&i))
+    {
+        struct page *parent_page = hash_entry(hash_cur(&i), struct page, elem);
+        enum vm_type t = VM_TYPE(parent_page->operations->type);
+        void *va = parent_page->va;
+        bool wr = parent_page->writable;
+
+        switch (t)
+        {
+        case VM_UNINIT: {
+            vm_initializer *init_fn = parent_page->uninit.init;
+            struct segment_info *parent_aux = parent_page->uninit.aux;
+            struct segment_info *child_aux =
+                (struct segment_info *)malloc(sizeof(struct segment_info));
+            if (child_aux == NULL)
+            {
+                return false;
+            }
+            *child_aux = (struct segment_info){
+                .file = file_reopen(parent_aux->file),
+                .ofs = parent_aux->ofs,
+                .read_byte = parent_aux->read_byte,
+                .zero_byte = parent_aux->zero_byte,
+            };
+            if (!vm_alloc_page_with_initializer(page_get_type(parent_page), va, wr, init_fn,
+                                                child_aux))
+            {
+                file_close(child_aux->file);
+                free(child_aux);
+                return false;
+            }
+            break;
+        }
+        case VM_ANON:
+        case VM_FILE: {
+            if (!(vm_alloc_page(t, va, wr) && vm_claim_page(va)))
+            {
+                return false;
+            }
+            struct page *child_page = spt_find_page(dst, va);
+            memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
+            break;
+        }
+        default:
+            return false;
+        }
+    }
+    return true;
 }
 
 /* Free the resource hold by the supplemental page table */
-void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
+void supplemental_page_table_kill(struct supplemental_page_table *spt)
 {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
+    hash_clear(&spt->pages, spt_destroy_func);
 }
 
 uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED)
@@ -256,4 +308,10 @@ bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *a
     struct page *pa = hash_entry(a, struct page, elem);
     struct page *pb = hash_entry(b, struct page, elem);
     return pa->va < pb->va;
+}
+
+void spt_destroy_func(struct hash_elem *e, void *aux)
+{
+    struct page *p = hash_entry(e, struct page, elem);
+    vm_dealloc_page(p);
 }
