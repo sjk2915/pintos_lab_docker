@@ -383,13 +383,13 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt)
     hash_clear(&spt->pages, spt_destroy_func);
 }
 
-uint64_t spt_hash_func(const struct hash_elem *e, void *aux)
+uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED)
 {
     struct page *p = hash_entry(e, struct page, elem);
     return hash_bytes(&p->va, sizeof p->va);
 }
 
-bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux)
+bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
 {
     struct page *pa = hash_entry(a, struct page, elem);
     struct page *pb = hash_entry(b, struct page, elem);

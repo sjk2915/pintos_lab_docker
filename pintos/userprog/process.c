@@ -273,7 +273,7 @@ int process_exec(void *f_name)
 
     /* We first kill the current context */
     process_cleanup();
-    supplemental_page_table_init(&thread_current()->spt);
+
     int argc = 0;
     char *argv[32];
     char *token, *save_ptr;
