@@ -10,6 +10,7 @@
 
 /* Disk used for file system. */
 extern struct disk *filesys_disk;
+extern struct lock filesys_lock;
 
 void filesys_init(bool format);
 void filesys_done(void);

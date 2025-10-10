@@ -37,7 +37,7 @@ lg-random PASS
 page-merge-seq PASS
 pt-bad-read PASS
 rox-child PASS
-page-merge-par FAIL
+page-merge-par PASS
 mmap-write FAIL
 lazy-file FAIL
 pt-bad-addr PASS
@@ -50,7 +50,7 @@ mmap-zero-len FAIL
 open-null PASS
 page-parallel PASS
 sm-seq-random PASS
-page-merge-stk FAIL
+page-merge-stk PASS
 bad-write2 PASS
 sm-seq-block PASS
 multi-recurse PASS
