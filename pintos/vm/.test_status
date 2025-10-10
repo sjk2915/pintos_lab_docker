@@ -61,9 +61,11 @@ mmap-kernel FAIL
 swap-fork PASS
 create-bad-ptr PASS
 read-stdout PASS
+priority-fifo PASS
 wait-bad-pid PASS
 lg-create PASS
 pt-grow-bad PASS
+mmap-twice FAIL
 pt-grow-stk-sc PASS
 mmap-twice FAIL
 exec-read PASS
@@ -107,6 +109,7 @@ args-many PASS
 mmap-clean FAIL
 fork-read PASS
 write-zero PASS
+alarm-multiple PASS
 create-exists PASS
 mmap-bad-off FAIL
 open-normal PASS
