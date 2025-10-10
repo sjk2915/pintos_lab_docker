@@ -6,8 +6,6 @@
 #include "vm/inspect.h"
 #include <string.h>
 
-static bool no_op_init(struct page *page, void *aux);
-
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void)
@@ -244,90 +242,51 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
     while (hash_next(&i))
     {
         struct page *parent_page = hash_entry(hash_cur(&i), struct page, elem);
-        if (parent_page->frame == NULL) // 프레임이 없다는건 부모가 아직 uninit 상태라는 뜻(claim x)
-        {
-            vm_initializer *init_fn = parent_page->uninit.init;
-            enum vm_type t = VM_TYPE(parent_page->uninit.type);
-            switch (t)
-            {
-            case VM_FILE: {
-                struct segment_info *parent_aux = parent_page->uninit.aux;
-                struct segment_info *child_aux =
-                    (struct segment_info *)malloc(sizeof(struct segment_info));
-                child_aux->file = file_reopen(parent_aux->file);
-                child_aux->ofs = parent_aux->ofs;
-                child_aux->read_byte = parent_aux->read_byte;
-                child_aux->zero_byte = parent_aux->zero_byte;
-                if (!vm_alloc_page_with_initializer(t, parent_page->va, parent_page->writable,
-                                                    init_fn, child_aux))
-                {
-                    file_close(child_aux->file);
-                    free(child_aux);
-                    goto err;
-                }
-                break;
-            }
-            case VM_ANON: {
-                if (!vm_alloc_page_with_initializer(t, parent_page->va, parent_page->writable, NULL,
-                                                    NULL))
-                {
-                    goto err;
-                }
-                break;
-            }
-            default: {
-                goto err;
-            }
-            }
-            if (!vm_claim_page(parent_page->va))
-            {
-                goto err;
-            }
-        }
-        else
-        {
-            enum vm_type t = VM_TYPE(parent_page->operations->type);
-            switch (t)
-            {
-            case VM_FILE: {
-                struct segment_info *child_aux =
-                    (struct segment_info *)malloc(sizeof(struct segment_info));
-                child_aux->file = file_reopen(parent_page->file.file);
-                child_aux->ofs = parent_page->file.ofs;
-                child_aux->read_byte = parent_page->file.read_byte;
-                child_aux->zero_byte = parent_page->file.zero_byte;
+        enum vm_type t = VM_TYPE(parent_page->operations->type);
+        void *va = parent_page->va;
+        bool wr = parent_page->writable;
 
-                if (!vm_alloc_page_with_initializer(t, parent_page->va, parent_page->writable,
-                                                    no_op_init, child_aux))
-                {
-                    file_close(child_aux->file);
-                    free(child_aux);
-                    goto err;
-                }
-                break;
-            }
-            case VM_ANON: {
-                if (!vm_alloc_page(t, parent_page->va, parent_page->writable))
-                {
-                    goto err;
-                }
-                break;
-            }
-            default: {
-                goto err;
-            }
-            }
-            if (!vm_claim_page(parent_page->va))
+        switch (t)
+        {
+        case VM_UNINIT: {
+            vm_initializer *init_fn = parent_page->uninit.init;
+            struct segment_info *parent_aux = parent_page->uninit.aux;
+            struct segment_info *child_aux =
+                (struct segment_info *)malloc(sizeof(struct segment_info));
+            if (child_aux == NULL)
             {
-                goto err;
+                return false;
             }
-            struct page *child_page = spt_find_page(dst, parent_page->va);
+            *child_aux = (struct segment_info){
+                .file = file_reopen(parent_aux->file),
+                .ofs = parent_aux->ofs,
+                .read_byte = parent_aux->read_byte,
+                .zero_byte = parent_aux->zero_byte,
+            };
+            if (!vm_alloc_page_with_initializer(page_get_type(parent_page), va, wr, init_fn,
+                                                child_aux))
+            {
+                file_close(child_aux->file);
+                free(child_aux);
+                return false;
+            }
+            break;
+        }
+        case VM_ANON:
+        case VM_FILE: {
+            if (!(vm_alloc_page(t, va, wr) && vm_claim_page(va)))
+            {
+                return false;
+            }
+            struct page *child_page = spt_find_page(dst, va);
             memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
+            break;
+        }
+        default:
+            return false;
         }
     }
     return true;
-err:
-    return false;
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -335,7 +294,7 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt)
 {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
-    hash_destroy(&spt->pages, spt_destroy_func);
+    hash_clear(&spt->pages, spt_destroy_func);
 }
 
 uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED)
@@ -355,16 +314,4 @@ void spt_destroy_func(struct hash_elem *e, void *aux)
 {
     struct page *p = hash_entry(e, struct page, elem);
     vm_dealloc_page(p);
-}
-static bool no_op_init(struct page *page, void *aux)
-{
-    (void)page; /* unused */
-    if (aux != NULL)
-    {
-        /* 주의! 여기서 파일을 닫으면 안됨.
-           file_backed_initializer()가 aux 안의 파일 핸들을
-           page->file.file로 넘겨받아 소유. */
-        free(aux);
-    }
-    return true;
 }

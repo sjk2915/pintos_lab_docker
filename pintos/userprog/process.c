@@ -281,7 +281,6 @@ int process_exec(void *f_name)
          token = strtok_r(NULL, " ", &save_ptr))
         argv[argc++] = token;
 
-    supplemental_page_table_init(&thread_current()->spt);
     /* And then load the binary */
     success = load(argc, argv, &_if);
 
@@ -804,6 +803,7 @@ static bool lazy_load_segment(struct page *page, void *aux)
     }
 
     // 더 이상 aux 쓰지 않으면 free
+    file_close(p_aux->file);
     free(p_aux);
 
     return true;

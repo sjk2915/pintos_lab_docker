@@ -30,7 +30,10 @@
         "compare": "c",
         "tuple": "c",
         "type_traits": "c",
-        "utility": "c"
+        "utility": "c",
+        "filesys.h": "c",
+        "file.h": "c",
+        "synch.h": "c"
     },
     "files.eol": "\n"
 }
