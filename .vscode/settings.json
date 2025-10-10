@@ -26,7 +26,11 @@
         "vector": "c",
         "memory_resource": "c",
         "functional": "c",
-        "malloc.h": "c"
+        "malloc.h": "c",
+        "compare": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c"
     },
     "files.eol": "\n"
 }
