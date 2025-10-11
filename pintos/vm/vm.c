@@ -116,7 +116,11 @@ bool spt_insert_page(struct supplemental_page_table *spt, struct page *page)
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
     hash_delete(&spt->pages, &page->elem);
+    void *kva = page->frame->kva;
+    void *va = page->va;
     vm_dealloc_page(page);
+    pml4_clear_page(thread_current()->pml4, va);
+    palloc_free_page(kva);
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -142,6 +146,7 @@ static struct frame *vm_evict_frame(void)
 
     victim->page->frame = NULL;
     victim->page = NULL;
+    memset(victim->kva, 0, PGSIZE);
 
     return victim;
 }
@@ -153,16 +158,17 @@ static struct frame *vm_evict_frame(void)
 static struct frame *vm_get_frame(void)
 {
     /* TODO: Fill this function. */
-    struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
-    frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
-    if (frame->kva == NULL)
+    void *kva = palloc_get_page(PAL_USER | PAL_ZERO);
+    if (kva == NULL)
     {
         struct frame *victim = vm_evict_frame();
         ASSERT(victim != NULL);
 
-        frame->kva = victim->kva;
-        free(victim);
+        return victim;
     }
+
+    struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
+    frame->kva = kva;
     frame->page = NULL;
 
     return frame;
@@ -192,8 +198,6 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
     if (!not_present || addr == NULL || is_kernel_vaddr(addr))
         return false;
 
-    // 주어진 addr로 보조 페이지 테이블에서 폴트가 발생한 페이지를 찾기
-    struct page *page = spt_find_page(spt, addr);
     if (page == NULL)
     {
         if (addr >= rsp - 8 && ((USER_STACK - (1 << 20)) < addr) && (addr < USER_STACK))
@@ -273,14 +277,17 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
                 .read_byte = src_aux->read_byte,
                 .zero_byte = src_aux->zero_byte,
             };
+
             if (!vm_alloc_page_with_initializer(page_get_type(src_page), src_page->va,
                                                 src_page->writable, src_page->uninit.init, dst_aux))
             {
+                file_close(dst_aux->file);
                 free(dst_aux);
                 return false;
             }
             break;
 
+        // 로드 된 페이지
         case VM_ANON:
         case VM_FILE:
             if (!(vm_alloc_page(type, src_page->va, src_page->writable) &&
