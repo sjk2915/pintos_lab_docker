@@ -402,33 +402,40 @@ static int sys_dup2(int oldfd, int newfd)
 static void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
     // addr가 0인 경우 (Pintos의 일부 코드는 가상 페이지 0이 매핑되지 않았다고 가정함)
-    check_ptr(addr);
+    if (addr == NULL)
+        return NULL;
+    // addr가 커널 영억을 침범하는 경우
+    if (is_kernel_vaddr(addr))
+        return NULL;
     // addr가 페이지 정렬(page-aligned)되어 있지 않은 경우
     if ((uint64_t)addr % PGSIZE != 0)
         return NULL;
     // length가 0일 경우
     if (length == 0)
         return NULL;
+    // length보다 offset이 클 경우
+    if (length < offset)
+        return NULL;
     struct thread *cur = thread_current();
     // fd로 파일을 찾을 수 없는 경우
     if (check_fd(cur, fd) == -1)
         return NULL;
     struct file *file = cur->fdt[fd];
-    // fd가 콘솔 입출력(STDIN_FILENO 또는 STDOUT_FILENO)을 나타내는 경우
+    // 파일이 콘솔 입출력(STDIN_FILENO 또는 STDOUT_FILENO)을 나타내는 경우
     if (IS_STDIO(file))
         return NULL;
     // fd로 열린 파일의 길이가 0일 경우
     if (file_length(file) == 0)
         return NULL;
-    /* 매핑하려는 가상 주소 범위(addr부터 addr + length까지)가 기존에 매핑된 페이지 영역 (예: 코드,
-     * 데이터, 스택, 다른 mmap 영역)과 겹치는 경우 */
+    /* 매핑하려는 가상 주소 범위(addr부터 addr + length까지)가 기존에 매핑된 페이지 영역
+       (예: 코드, 데이터, 스택, 다른 mmap 영역)과 겹치는 경우 */
     for (void *i = addr; i < addr + length; i += PGSIZE)
     {
         if (spt_find_page(&cur->spt, i) != NULL)
             return NULL;
     }
 
-    return do_mmap(addr, length, writable, file_reopen(file), offset);
+    return do_mmap(addr, length, writable, file, offset);
 }
 
 static void sys_munmap(void *addr)
