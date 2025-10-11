@@ -296,11 +296,6 @@ static int sys_read(int fd, void *buffer, unsigned size)
         sys_exit(-1);
     }
     struct thread *cur = thread_current();
-    // 버퍼 검증
-    struct page *page = spt_find_page(&cur->spt, buffer);
-    if (page && !page->writable)
-        sys_exit(-1);
-
     if (check_fd(cur, fd) == -1)
         return -1;
 
