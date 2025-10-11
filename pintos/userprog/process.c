@@ -804,6 +804,7 @@ static bool lazy_load_segment(struct page *page, void *aux)
         memset(p_kva + page_read_byte, 0, page_zero_byte);
 
     // 더 이상 aux 쓰지 않으면 free
+    file_close(p_aux->file);
     free(p_aux);
 
     return true;
@@ -840,7 +841,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
         struct segment_info *aux = (struct segment_info *)malloc(sizeof(struct segment_info));
-        aux->file = file;
+        aux->file = file_reopen(file);
         aux->ofs = ofs;
         aux->read_byte = page_read_bytes;
         aux->zero_byte = page_zero_bytes;
@@ -854,6 +855,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         ofs += page_read_bytes;
         upage += PGSIZE;
     }
+
     return true;
 }
 
