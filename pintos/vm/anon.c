@@ -10,7 +10,7 @@ static bool anon_swap_in(struct page *page, void *kva);
 static bool anon_swap_out(struct page *page);
 static void anon_destroy(struct page *page);
 
-// 디스크 섹터 사용여부를 01010101010101로 마구마구 표현
+// 디스크 섹터 사용여부를 01010101010101(예시)로 표현
 static struct bitmap *swap_bitmap;
 
 /* DO NOT MODIFY this struct */
@@ -64,7 +64,8 @@ static bool anon_swap_in(struct page *page, void *kva)
 static bool anon_swap_out(struct page *page)
 {
     struct anon_page *anon_page = &page->anon;
-    // 1페이지를 넣으려면 8섹터 필요함
+    /* 1페이지를 넣으려면 8섹터 필요함
+       1PAGE = 4096B, 1SECTOR = 512B */
     size_t sector = bitmap_scan_and_flip(swap_bitmap, 0, 8, false);
     if (sector == BITMAP_ERROR)
         return false;
