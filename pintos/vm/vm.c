@@ -252,13 +252,15 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
                                   struct supplemental_page_table *src)
 {
     struct hash_iterator i;
-    hash_first(&i, src);
+    hash_first(&i, &src->pages);
     while (hash_next(&i))
     {
         struct page *src_page = hash_entry(hash_cur(&i), struct page, elem);
         struct page *dst_page;
-        switch (src_page->operations->type)
+        enum vm_type type = VM_TYPE(src_page->operations->type);
+        switch (type)
         {
+        // 로드 안된 페이지
         case VM_UNINIT:
             struct segment_info *src_aux = src_page->uninit.aux;
             struct segment_info *dst_aux =
@@ -280,15 +282,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
             break;
 
         case VM_ANON:
-            if (!(vm_alloc_page(VM_ANON, src_page->va, src_page->writable) &&
-                  vm_claim_page(src_page->va)))
-                return false;
-            dst_page = spt_find_page(dst, src_page->va);
-            memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
-            break;
-
         case VM_FILE:
-            if (!(vm_alloc_page(VM_FILE, src_page->va, src_page->writable) &&
+            if (!(vm_alloc_page(type, src_page->va, src_page->writable) &&
                   vm_claim_page(src_page->va)))
                 return false;
             dst_page = spt_find_page(dst, src_page->va);
