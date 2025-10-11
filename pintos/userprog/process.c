@@ -472,7 +472,10 @@ static bool load(int argc, char **argv, struct intr_frame *if_)
     process_activate(thread_current());
 
     /* Open executable file. */
+    lock_acquire(&filesys_lock);
     file = filesys_open(argv[0]);
+    lock_release(&filesys_lock);
+
     if (file == NULL)
     {
         printf("load: %s: open failed\n", argv[0]);

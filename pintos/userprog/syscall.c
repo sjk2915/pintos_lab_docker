@@ -233,20 +233,34 @@ static int sys_wait(pid_t pid)
 static bool sys_create(const char *file, unsigned initial_size)
 {
     check_ptr(file);
-    return filesys_create(file, initial_size);
+
+    lock_acquire(&filesys_lock);
+    bool succ = filesys_create(file, initial_size);
+    lock_release(&filesys_lock);
+
+    return succ;
 }
 
 static bool sys_remove(const char *file)
 {
     check_ptr(file);
-    return filesys_remove(file);
+
+    lock_acquire(&filesys_lock);
+    bool succ = filesys_remove(file);
+    lock_release(&filesys_lock);
+
+    return succ;
 }
 
 static int sys_open(const char *file)
 {
     check_ptr(file);
     struct thread *cur = thread_current();
+
+    lock_acquire(&filesys_lock);
     struct file *new_file = filesys_open(file);
+    lock_release(&filesys_lock);
+
     // 열기 실패
     if (new_file == NULL)
         return -1;
