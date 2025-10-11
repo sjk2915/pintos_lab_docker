@@ -347,10 +347,10 @@ void process_exit(void)
     free(cur->fdt);
     cur->fdt_size = 0;
 
+    process_cleanup();
+
     sema_up(&cur->wait_sema);
     sema_down(&cur->exit_sema);
-
-    process_cleanup();
 }
 
 /* Free the current process's resources. */
