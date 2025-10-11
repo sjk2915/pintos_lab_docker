@@ -16,6 +16,7 @@
 #include "filesys/file.h"
 #include "filesys/inode.h"
 #include "devices/input.h"
+#include "include/lib/round.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -43,6 +44,8 @@ static void sys_close(int fd);
 
 /* Extra for Project 2 */
 static int sys_dup2(int oldfd, int newfd);
+static void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+static void sys_munmap(void *addr);
 
 /* Project 3 and optionally project 4. */
 static void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
