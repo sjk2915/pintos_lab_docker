@@ -84,4 +84,7 @@ static void anon_destroy(struct page *page)
     // 스왑 디스크에 할당된 공간이 있으면 해제
     if (anon_page->sector_idx != -1)
         bitmap_set_multiple(swap_bitmap, anon_page->sector_idx, 8, false);
+
+    // 프레임 해제
+    free(page->frame);
 }
