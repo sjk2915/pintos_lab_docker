@@ -61,7 +61,7 @@ static void uninit_destroy(struct page *page)
     struct uninit_page *uninit = &page->uninit;
     /* TODO: Fill this function.
      * TODO: If you don't have anything to do, just return. */
-    struct segment_info *aux = uninit->aux;
+    struct segment_info *aux = (struct segment_info *)uninit->aux;
     if (aux != NULL)
     {
         file_close(aux->file);

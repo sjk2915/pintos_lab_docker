@@ -82,8 +82,8 @@ static void kill(struct intr_frame *f)
         /* User's code segment, so it's a user exception, as we
            expected.  Kill the user process.  */
         struct thread *cur = thread_current();
-        printf("%s: dying due to interrupt %#04llx (%s).\n", cur->name, f->vec_no,
-               intr_name(f->vec_no));
+        //   printf("%s: dying due to interrupt %#04llx (%s).\n", cur->name, f->vec_no,
+        //          intr_name(f->vec_no));
         cur->exit_status = -1;
         printf("%s: exit(%d)\n", cur->name, cur->exit_status);
         thread_exit();
@@ -140,29 +140,27 @@ static void page_fault(struct intr_frame *f)
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
+    /* Count page faults. */
+    page_fault_cnt++;
+
 #ifdef VM
     /* For project 3 and later. */
     if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
         return;
 #endif
 
-    /* Count page faults. */
-    page_fault_cnt++;
     // 커널영역에서 실패 했을 경우 thread_exit()
-    if (!user)
+    if (!user && is_user_vaddr(fault_addr))
     {
-        if (is_user_vaddr(fault_addr))
-        {
-            struct thread *cur = thread_current();
-            f->rsp = cur->user_rsp;
-            cur->exit_status = -1;
-            printf("%s: exit(%d)\n", cur->name, cur->exit_status);
-            thread_exit();
-        }
+        struct thread *cur = thread_current();
+        cur->exit_status = -1;
+        printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+        thread_exit();
     }
-    /* If the fault is true fault, show info and exit. */
-    printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
-           not_present ? "not present" : "rights violation", write ? "writing" : "reading",
-           user ? "user" : "kernel");
+
+    //  /* If the fault is true fault, show info and exit. */
+    //  printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
+    //         not_present ? "not present" : "rights violation", write ? "writing" : "reading",
+    //         user ? "user" : "kernel");
     kill(f);
 }

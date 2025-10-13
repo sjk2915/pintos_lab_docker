@@ -11,6 +11,7 @@
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
+struct lock filesys_lock;
 
 struct lock filesys_lock;
 

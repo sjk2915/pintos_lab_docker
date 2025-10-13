@@ -217,7 +217,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function, void 
     t->fdt_size = INITIAL_FDT_SIZE;
     t->fdt[0] = STDIN_FDNO;
     t->fdt[1] = STDOUT_FDNO;
-    t->fdt[2] = STDERR_FDNO;
+    t->fdt[2] = NULL;
     t->fdt[3] = NULL;
 #endif
 

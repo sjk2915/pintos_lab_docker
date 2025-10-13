@@ -19,13 +19,13 @@
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-/* Projects 2 and later. */
+
 static void check_ptr(void *addr);
 static int check_fd(struct thread *t, int fd);
-
 static int find_fd(struct thread *t);
 static int extend_fdt(struct thread *t);
 
+/* Projects 2 and later. */
 static void sys_halt(void);
 static void sys_exit(int status);
 static pid_t sys_fork(const char *thread_name, struct intr_frame *f);
@@ -41,7 +41,12 @@ static void sys_seek(int fd, unsigned position);
 static unsigned sys_tell(int fd);
 static void sys_close(int fd);
 
+/* Extra for Project 2 */
 static int sys_dup2(int oldfd, int newfd);
+
+/* Project 3 and optionally project 4. */
+static void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+static void sys_munmap(void *addr);
 
 /* System call.
  *
@@ -70,9 +75,12 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f)
 {
+    // TODO: Your implementation goes here.
     // user_rsp 저장
     thread_current()->user_rsp = f->rsp;
-    // TODO: Your implementation goes here.
+
+    // %rdi, %rsi, %rdx, %r10, %r8, and %r9.
+
     switch (f->R.rax)
     {
     case SYS_HALT:
@@ -103,10 +111,10 @@ void syscall_handler(struct intr_frame *f)
         f->R.rax = sys_filesize(f->R.rdi);
         break;
     case SYS_READ:
-        f->R.rax = sys_read(f->R.rdi, (const void *)f->R.rsi, f->R.rdx);
+        f->R.rax = sys_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
         break;
     case SYS_WRITE:
-        f->R.rax = sys_write(f->R.rdi, (const void *)f->R.rsi, f->R.rdx);
+        f->R.rax = sys_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
         break;
     case SYS_SEEK:
         sys_seek(f->R.rdi, f->R.rsi);
@@ -119,6 +127,12 @@ void syscall_handler(struct intr_frame *f)
         break;
     case SYS_DUP2:
         f->R.rax = sys_dup2(f->R.rdi, f->R.rsi);
+        break;
+    case SYS_MMAP:
+        f->R.rax = sys_mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+        break;
+    case SYS_MUNMAP:
+        sys_munmap((void *)f->R.rdi);
         break;
     default:
         printf("not implemented system call!: %d\n", f->R.rax);
@@ -218,18 +232,22 @@ static int sys_wait(pid_t pid)
 static bool sys_create(const char *file, unsigned initial_size)
 {
     check_ptr(file);
+
     lock_acquire(&filesys_lock);
     bool succ = filesys_create(file, initial_size);
     lock_release(&filesys_lock);
+
     return succ;
 }
 
 static bool sys_remove(const char *file)
 {
     check_ptr(file);
+
     lock_acquire(&filesys_lock);
     bool succ = filesys_remove(file);
     lock_release(&filesys_lock);
+
     return succ;
 }
 
@@ -237,9 +255,11 @@ static int sys_open(const char *file)
 {
     check_ptr(file);
     struct thread *cur = thread_current();
+
     lock_acquire(&filesys_lock);
     struct file *new_file = filesys_open(file);
     lock_release(&filesys_lock);
+
     // 열기 실패
     if (new_file == NULL)
         return -1;
@@ -376,4 +396,53 @@ static int sys_dup2(int oldfd, int newfd)
         cur->fdt[newfd] = file_duplicate2(cur->fdt[oldfd]);
 
     return newfd;
+}
+
+static void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+    // addr가 0인 경우 (Pintos의 일부 코드는 가상 페이지 0이 매핑되지 않았다고 가정함)
+    if (addr == NULL)
+        return NULL;
+    // addr가 커널 영억을 침범하는 경우
+    if (is_kernel_vaddr(addr))
+        return NULL;
+    // addr가 페이지 정렬(page-aligned)되어 있지 않은 경우
+    if ((uint64_t)addr % PGSIZE != 0)
+        return NULL;
+    // length가 0일 경우
+    if (length == 0)
+        return NULL;
+    // length보다 offset이 클 경우
+    if (length < offset)
+        return NULL;
+    struct thread *cur = thread_current();
+    // fd로 파일을 찾을 수 없는 경우
+    if (check_fd(cur, fd) == -1)
+        return NULL;
+    struct file *file = cur->fdt[fd];
+    // 파일이 콘솔 입출력(STDIN_FILENO 또는 STDOUT_FILENO)을 나타내는 경우
+    if (IS_STDIO(file))
+        return NULL;
+    // fd로 열린 파일의 길이가 0일 경우
+    if (file_length(file) == 0)
+        return NULL;
+    /* 매핑하려는 가상 주소 범위(addr부터 addr + length까지)가 기존에 매핑된 페이지 영역
+       (예: 코드, 데이터, 스택, 다른 mmap 영역)과 겹치는 경우 */
+    for (void *i = addr; i < addr + length; i += PGSIZE)
+    {
+        if (spt_find_page(&cur->spt, i) != NULL)
+            return NULL;
+    }
+
+    return do_mmap(addr, length, writable, file, offset);
+}
+
+static void sys_munmap(void *addr)
+{
+    // addr가 0인 경우 (Pintos의 일부 코드는 가상 페이지 0이 매핑되지 않았다고 가정함)
+    // addr가 커널 영억을 침범하는 경우
+    if (addr == NULL || is_kernel_vaddr(addr))
+        return;
+
+    do_munmap(addr);
 }

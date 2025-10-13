@@ -347,10 +347,10 @@ void process_exit(void)
     free(cur->fdt);
     cur->fdt_size = 0;
 
+    process_cleanup();
+
     sema_up(&cur->wait_sema);
     sema_down(&cur->exit_sema);
-
-    process_cleanup();
 }
 
 /* Free the current process's resources. */
@@ -475,6 +475,7 @@ static bool load(int argc, char **argv, struct intr_frame *if_)
     lock_acquire(&filesys_lock);
     file = filesys_open(argv[0]);
     lock_release(&filesys_lock);
+
     if (file == NULL)
     {
         printf("load: %s: open failed\n", argv[0]);
@@ -800,9 +801,7 @@ static bool lazy_load_segment(struct page *page, void *aux)
 
     // 남은 영역 0으로 채우기
     if (page_zero_byte > 0)
-    {
         memset(p_kva + page_read_byte, 0, page_zero_byte);
-    }
 
     // 더 이상 aux 쓰지 않으면 free
     file_close(p_aux->file);
@@ -848,11 +847,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         aux->zero_byte = page_zero_bytes;
 
         if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_segment, aux))
-        {
-            file_close(aux->file);
-            free(aux);
             return false;
-        }
 
         /* Advance. */
         read_bytes -= page_read_bytes;
@@ -860,6 +855,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         ofs += page_read_bytes;
         upage += PGSIZE;
     }
+
     return true;
 }
 
@@ -874,7 +870,7 @@ static bool setup_stack(struct intr_frame *if_)
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
 
-    if (vm_alloc_page(VM_ANON, stack_bottom, true) && vm_claim_page(stack_bottom))
+    if (vm_alloc_page(VM_ANON | VM_STACK, stack_bottom, true) && vm_claim_page(stack_bottom))
     {
         success = true;
         if_->rsp = USER_STACK;

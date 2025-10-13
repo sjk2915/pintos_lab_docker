@@ -35,10 +35,8 @@ typedef int tid_t;
 /* Predefined fd handles. */
 #define STDIN_FDNO (struct file *)1
 #define STDOUT_FDNO (struct file *)2
-#define STDERR_FDNO (struct file *)3
 
-#define IS_STDIO(filep)                                                                            \
-    ((filep) == STDIN_FDNO || (filep) == STDOUT_FDNO || (filep) == STDERR_FDNO) ? true : false
+#define IS_STDIO(filep) ((filep) == STDIN_FDNO || (filep) == STDOUT_FDNO) ? true : false
 
 #define INITIAL_FDT_SIZE 4
 #define MAX_FDT_SIZE 512

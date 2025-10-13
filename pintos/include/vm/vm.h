@@ -20,7 +20,7 @@ enum vm_type
 
     /* Auxillary bit flag marker for store information. You can add more
      * markers, until the value is fit in the int. */
-    VM_MARKER_0 = (1 << 3),
+    VM_STACK = (1 << 3),
     VM_MARKER_1 = (1 << 4),
 
     /* DO NOT EXCEED THIS VALUE. */
@@ -52,6 +52,7 @@ struct page
     /* Your implementation */
     struct hash_elem elem; /* 해쉬테이블에 넣을 elem */
     bool writable;
+    bool is_stack;
 
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
@@ -114,10 +115,6 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt);
 struct page *spt_find_page(struct supplemental_page_table *spt, void *va);
 bool spt_insert_page(struct supplemental_page_table *spt, struct page *page);
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page);
-
-uint64_t spt_hash_func(const struct hash_elem *e, void *aux);
-bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
-void spt_destroy_func(struct hash_elem *e, void *aux);
 
 void vm_init(void);
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present);
