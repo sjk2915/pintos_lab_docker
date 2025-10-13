@@ -67,4 +67,5 @@ static void uninit_destroy(struct page *page)
         file_close(aux->file);
         free(aux);
     }
+    free(page->frame);
 }

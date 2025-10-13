@@ -119,7 +119,11 @@ bool spt_insert_page(struct supplemental_page_table *spt, struct page *page)
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
     hash_delete(&spt->pages, &page->elem);
+    void *kva = page->frame->kva;
+    void *va = page->va;
     vm_dealloc_page(page);
+    pml4_clear_page(thread_current()->pml4, va);
+    palloc_free_page(kva);
 }
 
 /* Get the struct frame, that will be evicted. */

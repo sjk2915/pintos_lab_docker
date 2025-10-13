@@ -195,3 +195,24 @@ static bool lazy_file_segment(struct page *page, void *aux)
 
     return true;
 }
+
+static bool lazy_file_segment(struct page *page, void *aux)
+{
+    struct file_info *p_aux = aux;
+
+    void *p_kva = page->frame->kva; // 물리 프레임의 커널 주소
+
+    size_t page_read_byte = p_aux->read_byte; // 읽을 바이트 수
+    size_t page_zero_byte = p_aux->zero_byte; // 제로 바이트 수
+
+    if (page_read_byte > 0)
+        file_read_at(p_aux->file, p_kva, page_read_byte, p_aux->ofs);
+
+    // 남은 영역 0으로 채우기
+    if (page_zero_byte > 0)
+        memset(p_kva + page_read_byte, 0, page_zero_byte);
+
+    page->file.file_info = p_aux;
+
+    return true;
+}
