@@ -3,8 +3,6 @@
 #include "filesys/file.h"
 #include "vm/vm.h"
 
-#define MIN(a, b) (((a)) < ((b)) ? (a) : (b))
-
 struct page;
 enum vm_type;
 
