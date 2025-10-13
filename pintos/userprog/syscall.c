@@ -75,9 +75,8 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f)
 {
-    // user_rsp 저장
-    thread_current()->user_rsp = f->rsp;
     // TODO: Your implementation goes here.
+    // user_rsp 저장
     thread_current()->user_rsp = f->rsp;
 
     // %rdi, %rsi, %rdx, %r10, %r8, and %r9.
@@ -440,6 +439,10 @@ static void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t off
 
 static void sys_munmap(void *addr)
 {
-    check_ptr(addr);
+    // addr가 0인 경우 (Pintos의 일부 코드는 가상 페이지 0이 매핑되지 않았다고 가정함)
+    // addr가 커널 영억을 침범하는 경우
+    if (addr == NULL || is_kernel_vaddr(addr))
+        return;
+
     do_munmap(addr);
 }
