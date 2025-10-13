@@ -33,8 +33,7 @@
         "utility": "c",
         "filesys.h": "c",
         "file.h": "c",
-        "synch.h": "c",
-        "parallel-merge.h": "c"
+        "synch.h": "c"
     },
     "files.eol": "\n"
 }
