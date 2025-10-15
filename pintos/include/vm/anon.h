@@ -9,6 +9,8 @@ struct anon_page
     int sector_idx;
 };
 
+extern struct bitmap *swap_bitmap;
+
 void vm_anon_init(void);
 bool anon_initializer(struct page *page, enum vm_type type, void *kva);
 
