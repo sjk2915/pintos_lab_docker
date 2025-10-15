@@ -11,7 +11,7 @@ static bool anon_swap_out(struct page *page);
 static void anon_destroy(struct page *page);
 
 // 디스크 섹터 사용여부를 01010101010101(예시)로 표현
-static struct bitmap *swap_bitmap;
+struct bitmap *swap_bitmap;
 
 /* DO NOT MODIFY this struct */
 static const struct page_operations anon_ops = {
@@ -49,7 +49,7 @@ static bool anon_swap_in(struct page *page, void *kva)
 {
     struct anon_page *anon_page = &page->anon;
     if (anon_page->sector_idx == -1)
-        return true;
+        return false;
 
     // 1페이지 읽어올때도 8섹터단위로
     for (int i = 0; i < 8; i++)
@@ -86,5 +86,6 @@ static void anon_destroy(struct page *page)
         bitmap_set_multiple(swap_bitmap, anon_page->sector_idx, 8, false);
 
     // 프레임 해제
-    free(page->frame);
+    if (page->frame)
+        frame_free(page->frame, page->va);
 }
