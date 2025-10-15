@@ -792,6 +792,7 @@ static bool lazy_load_segment(struct page *page, void *aux)
     if (page_read_byte > 0)
     {
         readn = file_read_at(p_aux->file, p_kva, page_read_byte, p_aux->ofs);
+
         // 읽기 실패
         if (page_read_byte != (size_t)readn)
         {
@@ -805,8 +806,7 @@ static bool lazy_load_segment(struct page *page, void *aux)
         memset(p_kva + page_read_byte, 0, page_zero_byte);
 
     // 더 이상 aux 쓰지 않으면 free
-    if (p_aux->file != NULL)
-        file_close(p_aux->file);
+    file_close(p_aux->file);
     free(p_aux);
 
     return true;

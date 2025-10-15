@@ -312,12 +312,7 @@ static int sys_read(int fd, void *buffer, unsigned size)
         return -1;
 
     else
-    {
-        lock_acquire(&filesys_lock);
-        off_t read_size = file_read(cur->fdt[fd], buffer, size);
-        lock_release(&filesys_lock);
-        return read_size;
-    }
+        return file_read(cur->fdt[fd], buffer, size);
 }
 
 static int sys_write(int fd, const void *buffer, unsigned size)

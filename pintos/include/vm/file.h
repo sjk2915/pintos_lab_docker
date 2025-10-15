@@ -6,15 +6,6 @@
 struct page;
 enum vm_type;
 
-struct file_info
-{
-    struct file *file;
-    off_t ofs;
-    size_t read_byte;
-    size_t zero_byte;
-    int map_cnt;
-};
-
 struct file_page
 {
     struct file_info *file_info;
