@@ -13,6 +13,8 @@
 struct disk *filesys_disk;
 struct lock filesys_lock;
 
+struct lock filesys_lock;
+
 static void do_format(void);
 
 /* Initializes the file system module.
