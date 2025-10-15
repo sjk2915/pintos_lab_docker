@@ -44,6 +44,7 @@ enum vm_type page_get_type(struct page *page)
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
+struct list_elem *clock_ptr;
 
 static uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED);
 static bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
@@ -118,12 +119,14 @@ bool spt_insert_page(struct supplemental_page_table *spt, struct page *page)
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
+    // 페이지가 물리 프레임에 연결되어 있는 경우에만 관련 리소스를 해제합니다.
+    if (page->frame)
+    {
+        pml4_clear_page(thread_current()->pml4, page->va);
+        palloc_free_page(page->frame->kva);
+    }
     hash_delete(&spt->pages, &page->elem);
-    void *kva = page->frame->kva;
-    void *va = page->va;
     vm_dealloc_page(page);
-    pml4_clear_page(thread_current()->pml4, va);
-    palloc_free_page(kva);
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -267,6 +270,8 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
 void vm_dealloc_page(struct page *page)
 {
     destroy(page);
+    if (page->frame)
+        free(page->frame);
     free(page);
 }
 
@@ -384,7 +389,7 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt)
 {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
-    hash_destroy(&spt->pages, spt_destroy_func);
+    hash_clear(&spt->pages, spt_destroy_func);
 }
 
 uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED)
