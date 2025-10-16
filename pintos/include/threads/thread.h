@@ -136,6 +136,7 @@ struct thread
     /* Table for whole virtual memory owned by thread. */
     struct supplemental_page_table spt;
     uintptr_t user_rsp; // 유저 프로세스의 rsp를 저장할 변수
+    struct thread *parent;
 #endif
 
     /* Owned by thread.c. */

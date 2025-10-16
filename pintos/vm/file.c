@@ -2,6 +2,10 @@
 
 #include "vm/vm.h"
 #include "threads/mmu.h"
+#include "devices/disk.h"
+#include "lib/kernel/bitmap.h"
+
+static struct disk *swap_disk;
 
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
@@ -20,6 +24,7 @@ static const struct page_operations file_ops = {
 /* The initializer of file vm */
 void vm_file_init(void)
 {
+    swap_disk = disk_get(1, 1);
 }
 
 /* Initialize the file backed page */
@@ -30,19 +35,46 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 
     struct file_page *file_page = &page->file;
     file_page->file_info = NULL;
+    file_page->type = type;
+    file_page->sector_idx = -1;
     return true;
 }
 
 /* Swap in the page by read contents from the file. */
 static bool file_backed_swap_in(struct page *page, void *kva)
 {
-    struct file_page *file_page UNUSED = &page->file;
+    struct file_page *file_page = &page->file;
+    struct file_info *file_info = file_page->file_info;
+
+    size_t page_read_byte = file_info->read_byte; // 읽을 바이트 수
+    size_t page_zero_byte = file_info->zero_byte; // 제로 바이트 수
+
+    /* TODO: VA is available when calling this function. */
+
+    if (page_read_byte > 0)
+        file_read_at(file_info->file, kva, page_read_byte, file_info->ofs);
+
+    // 남은 영역 0으로 채우기
+    if (page_zero_byte > 0)
+        memset(kva + page_read_byte, 0, page_zero_byte);
+
+    return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool file_backed_swap_out(struct page *page)
 {
-    struct file_page *file_page UNUSED = &page->file;
+    struct file_page *file_page = &page->file;
+    struct file_info *file_info = file_page->file_info;
+
+    if (file_info)
+    {
+        // dirty(수정된) 페이지는 파일에 저장해야함
+        if (pml4_is_dirty(thread_current()->pml4, page->va))
+            file_write_at(file_info->file, page->frame->kva, file_info->read_byte, file_info->ofs);
+    }
+
+    return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -50,12 +82,11 @@ static void file_backed_destroy(struct page *page)
 {
     struct file_page *file_page = &page->file;
     struct file_info *file_info = file_page->file_info;
-    struct thread *cur = thread_current();
 
     if (file_info)
     {
         // dirty(수정된) 페이지는 파일에 저장해야함
-        if (pml4_is_dirty(cur->pml4, page->va))
+        if (pml4_is_dirty(thread_current()->pml4, page->va))
             file_write_at(file_info->file, page->frame->kva, file_info->read_byte, file_info->ofs);
 
         // 더 이상 file_info 쓰지 않으면 free
@@ -64,7 +95,8 @@ static void file_backed_destroy(struct page *page)
     }
 
     // 프레임 해제
-    free(page->frame);
+    if (page->frame)
+        frame_free(page->frame, page->va);
 }
 
 /* Do the mmap */

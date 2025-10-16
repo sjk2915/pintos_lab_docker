@@ -165,6 +165,8 @@ static void __do_fork(void *aux)
     struct intr_frame if_;
     bool succ = true;
 
+    current->parent = parent;
+
     /* 1. Read the cpu context to local stack. */
     memcpy(&if_, parent_if, sizeof(struct intr_frame));
     // 자식 프로세스의 return 값은 0!!!!!
@@ -846,7 +848,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         aux->read_byte = page_read_bytes;
         aux->zero_byte = page_zero_bytes;
 
-        if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_segment, aux))
+        if (!vm_alloc_page_with_initializer(VM_ANON | VM_CODE, upage, writable, lazy_load_segment,
+                                            aux))
             return false;
 
         /* Advance. */

@@ -9,6 +9,8 @@ enum vm_type;
 struct file_page
 {
     struct file_info *file_info;
+    enum vm_type type;
+    int sector_idx;
 };
 
 struct file_info
